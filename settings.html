@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      width: 260px;
+      margin: 0;
+      padding: 14px;
+      background: #1c1e21;
+      color: #e8e6e1;
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+    }
+    h1 { font-size: 13px; margin: 0 0 12px; font-weight: 600; letter-spacing: .02em; }
+    .setting {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid #2c2f34;
+    }
+    .setting:last-of-type { border-bottom: none; }
+    .name { flex: 1; }
+    .hint { display: block; opacity: .55; font-size: 11px; margin-top: 2px; }
+
+    /* toggle switch */
+    .switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; inset: 0; cursor: pointer;
+      background: #3a3d42; border-radius: 20px; transition: .15s;
+    }
+    .slider::before {
+      content: ""; position: absolute; height: 14px; width: 14px;
+      left: 3px; top: 3px; background: #e8e6e1; border-radius: 50%; transition: .15s;
+    }
+    input:checked + .slider { background: #1e7e46; }
+    input:checked + .slider::before { transform: translateX(16px); }
+
+    input[type="text"] {
+      width: 110px; padding: 5px 8px; border: 1px solid #3a3d42;
+      border-radius: 6px; background: #26282c; color: #e8e6e1; font-size: 12px;
+    }
+    .footer { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .footer button {
+      background: none; border: 1px solid #3a3d42; color: #e8e6e1;
+      border-radius: 6px; padding: 5px 10px; font-size: 11px; cursor: pointer;
+    }
+    .footer button:hover { border-color: #5a5e66; }
+    #saved { font-size: 11px; color: #a8e6b8; opacity: 0; transition: opacity .2s; }
+  </style>
+</head>
+<body>
+  <h1>Dialer Hotkeys</h1>
+
+  <div class="setting">
+    <div class="name">
+      Floating panel
+      <span class="hint">Detached window, drag it anywhere</span>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="floatingPanel" />
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="setting">
+    <div class="name">
+      Buttons on Salesloft page
+      <span class="hint">Overlay in the bottom-left corner</span>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="pageOverlay" />
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="setting">
+    <div class="name">
+      Disposition
+      <span class="hint">Must match dropdown text exactly</span>
+    </div>
+    <input type="text" id="disposition" />
+  </div>
+
+  <div class="footer">
+    <button id="shortcuts">Edit shortcuts</button>
+    <span id="saved">Saved ✓</span>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

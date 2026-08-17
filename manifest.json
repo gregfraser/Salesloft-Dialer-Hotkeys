@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Salesloft Dialer Hotkeys",
+  "version": "1.1",
+  "description": "One-key cadence dialing with an optional floating control panel. End call + log No Answer + complete, or start the next call — from any tab.",
+  "permissions": ["tabs", "storage", "scripting"],
+  "host_permissions": ["https://app.salesloft.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "settings.html",
+    "default_title": "Dialer Hotkeys settings"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://app.salesloft.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "kill-and-log": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+9",
+        "mac": "Command+Shift+9"
+      },
+      "description": "End call, log No Answer, complete step"
+    },
+    "start-call": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+0",
+        "mac": "Command+Shift+0"
+      },
+      "description": "Start the next call"
+    }
+  }
+}
