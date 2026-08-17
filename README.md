@@ -17,9 +17,12 @@ That's it. Dial, no answer, red, green, repeat.
 
 You only have to do this once. The extension isn't in the Chrome Web Store, so Chrome needs you to load it manually — that's what these steps do.
 
-### Step 1 — Unzip the folder
+### Step 1 — Download the folder
 
-Find the file `salesloft-dialer-hotkeys-extension.zip` in your Downloads. Right-click it and choose **Extract All** (Windows) or double-click it (Mac). You'll get a folder called `salesloft-dialer-hotkeys`. Move that folder somewhere it can stay permanently — like your Documents folder.
+Click the green **Code** button at the top of this page, then **Download ZIP**. Open the downloaded file (Windows: right-click → **Extract All**; Mac: double-click) — you'll get a folder called `Salesloft-Dialer-Hotkeys-main`. Move that folder somewhere it can stay permanently — like your Documents folder.
+
+> [!NOTE]
+> Comfortable with git? `git clone https://github.com/gregfraser/Salesloft-Dialer-Hotkeys.git` gets you the same folder with nothing to extract.
 
 > [!WARNING]
 > Don't delete or move this folder later. Chrome runs the extension directly from it — if the folder goes in the trash, the extension stops working.
@@ -37,7 +40,7 @@ Look in the **top-right corner** of that page for a small toggle labeled **Devel
 
 ### Step 4 — Load the extension
 
-Three new buttons will appear near the top-left. Click **Load unpacked**, then find and select the `salesloft-dialer-hotkeys` folder from Step 1 and click **Select Folder**.
+Three new buttons will appear near the top-left. Click **Load unpacked**, then find and select the folder from Step 1 — the one with `manifest.json` inside it — and click **Select Folder**.
 
 ### Step 5 — Pin it to your toolbar
 
@@ -111,7 +114,7 @@ Check the **Disposition** field in settings — it must match your Salesloft dro
 <details>
 <summary><strong>The extension disappeared after restarting your computer?</strong></summary>
 
-The folder from Step 1 probably got moved or deleted. Put it back (or re-extract the zip), go to `chrome://extensions`, and click **Load unpacked** again.
+The folder from Step 1 probably got moved or deleted. Put it back (or download it again — Step 1), go to `chrome://extensions`, and click **Load unpacked** again.
 </details>
 
 ---
