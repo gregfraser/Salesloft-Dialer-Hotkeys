@@ -83,7 +83,9 @@ Nothing kills a call faster than dialing someone who already told your teammate
 reads the Disposition and Sentiment tags already on the contact's page and pops a
 toast at the top of the screen before you dial.
 
-Each tag keeps its own colour, so you can read the situation at a glance:
+It reads the tags off the activity feed — the pills on a logged call or a booked
+meeting — as well as any labelled Disposition/Sentiment field. Each tag keeps its
+own colour, so you can read the situation at a glance:
 
 | Tag | Colour | What it means |
 |---|---|---|
@@ -119,7 +121,7 @@ Click the extension's icon in your toolbar to open settings:
 | **Disposition** | The label the red button logs. Set to "No Answer." Only change this if your team's dropdown uses different wording — it must match the dropdown option in Salesloft **exactly**, including capitalization. |
 | **Alert on tags** | Turns the contact alerts on or off. |
 | **Tags to watch** | Which tags trigger an alert, comma separated. Starts with No Interest, Meeting Scheduled, Interested. Each one must match Salesloft's wording exactly. The coloured pills underneath show you what each tag will look like. |
-| **Only labelled fields** | On by default: only alerts on a tag that sits next to a **Disposition** or **Sentiment** label, which keeps unrelated text on the page from setting it off. Turn it off if your Salesloft layout shows these tags as bare pills and you're not seeing alerts. |
+| **Strict matching** | On by default: only counts a tag where Salesloft actually renders one — a pill on a logged call or meeting, a labelled Disposition/Sentiment field, or an activity table column. Keeps ordinary text like "we had a meeting scheduled last quarter" from setting it off. Turn it off only if your layout shows these tags somewhere unusual and you're not getting alerts. |
 | **Edit shortcuts** | Opens Chrome's shortcut settings if <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd>/<kbd>0</kbd> conflicts with something else or you'd prefer different keys. |
 
 ---
@@ -153,19 +155,22 @@ Check the **Disposition** field in settings — it must match your Salesloft dro
 <details>
 <summary><strong>Not seeing an alert on a contact you know is tagged?</strong></summary>
 
-Open settings (click the extension icon) and check two things. First, that the
-tag in **Tags to watch** matches Salesloft's wording exactly — "No Interest" and
-"Not Interested" are different text. Second, try turning **Only labelled fields**
-off: that setting requires the tag to sit next to a "Disposition" or "Sentiment"
-label, and some Salesloft layouts show these as bare pills instead.
+First make sure the version of the extension you loaded actually has this
+feature — open settings (click the extension icon) and look for a **CONTACT
+ALERTS** section. No section means you're running an older build; reload the
+folder at `chrome://extensions`.
+
+If the section is there, check that the tag in **Tags to watch** matches
+Salesloft's wording exactly — "No Interest" and "Not Interested" are different
+text. Failing that, try turning **Strict matching** off.
 </details>
 
 <details>
 <summary><strong>Getting an alert that doesn't belong?</strong></summary>
 
-Turn **Only labelled fields** back on — that's the setting that stops ordinary
-text on the page from counting as a tag. If it's already on, narrow **Tags to
-watch** to just the tags you care about.
+Turn **Strict matching** back on — that's the setting that stops ordinary text
+on the page from counting as a tag. If it's already on, narrow **Tags to watch**
+to just the tags you care about.
 </details>
 
 <details>
