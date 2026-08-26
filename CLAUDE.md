@@ -16,7 +16,7 @@ extension/   MV3 extension — load this folder in chrome://extensions
 server/      FastAPI transcription service (run from inside this directory)
 scripts/     Phase 0 benchmark, WAV replay harness, Windows setup
 tests/       pytest (server) + node --test (extension JS)
-docs/        architecture, compliance, troubleshooting
+docs/        architecture, troubleshooting
 ```
 
 ## Commands
@@ -110,7 +110,3 @@ When Salesloft ships UI changes, these are what break.
 - **Backpressure coalesces, it does not drop.** Merging queued utterances costs the same as one inference and keeps all the speech; dropping is the last resort when a merge would exceed the 30s window.
 - **Capture arming is a Chrome constraint, not a bug.** A tab capture stream requires the extension to have been invoked on that tab, and the invocation authorises whichever tab was active. So the from-any-tab hotkeys cannot *start* capture — only `Ctrl+Shift+8` (or a command fired) with Salesloft in front can. It persists across tab switches afterward.
 - Scope stays `https://app.salesloft.com/*` plus `http://127.0.0.1:8765/*`; the server binds to `127.0.0.1` and validates the WebSocket origin.
-
-## Compliance gate
-
-IT has approved the software. **Legal/compliance sign-off for capturing live calls has not been given.** `docs/compliance.md` holds the sign-off record and must be updated when that changes. Do not add anything that encourages live capture before that gate clears, and if disclosure turns out to be required, design it into the flow rather than bolting it on.

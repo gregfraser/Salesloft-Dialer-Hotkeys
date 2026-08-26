@@ -1,8 +1,7 @@
 """PCM buffering and conversion.
 
 Everything here operates on in-memory numpy arrays. No function in this
-module opens a file -- see docs/compliance.md for why that is a design
-constraint rather than an oversight.
+module opens a file: audio exists only for as long as inference needs it.
 """
 
 from __future__ import annotations

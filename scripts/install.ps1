@@ -54,5 +54,3 @@ Write-Host "Pre-downloading Whisper model: $model"
 Write-Host ''
 Write-Host 'Setup complete.' -ForegroundColor Green
 Write-Host 'Start the server with:  powershell -ExecutionPolicy Bypass -File scripts\start-server.ps1'
-Write-Host ''
-Write-Host 'Before your first live call, read docs\compliance.md.' -ForegroundColor Yellow

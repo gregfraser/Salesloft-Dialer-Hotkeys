@@ -269,7 +269,7 @@ async function onCallStateChange(callState, tabId) {
 // to fire even when Chrome isn't focused).
 chrome.commands.onCommand.addListener(async (command, tab) => {
   // Any command fired while Salesloft is in front is a valid extension
-  // invocation for that tab, which is what makes capture legal to start.
+  // invocation for that tab, which is what Chrome requires to start capture.
   if (isSalesloftTab(tab)) await armTab(tab.id);
 
   if (command === 'kill-and-log' || command === 'start-call') {

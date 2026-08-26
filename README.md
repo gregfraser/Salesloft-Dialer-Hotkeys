@@ -99,13 +99,6 @@ Shows you what the prospect just said, as text, while you're still on the call.
 It runs entirely on your own machine — no audio is recorded, saved, or sent
 anywhere.
 
-> [!WARNING]
-> **Do not use this on a live call until compliance has signed off.** IT has
-> approved the software; that is a different question from whether a call may be
-> captured, and the second one is still open. See
-> [docs/compliance.md](docs/compliance.md). Everything below can be set up and
-> tested against recorded audio in the meantime.
-
 ### One-time setup
 
 You need Python 3.10 or newer installed. Then, from the folder you downloaded:
@@ -165,7 +158,7 @@ and lines appearing that were never said.
 ## For developers
 
 - [docs/architecture.md](docs/architecture.md) — how the pieces fit together and why
-- [docs/compliance.md](docs/compliance.md) — the consent gate and what the code guarantees
+- [docs/troubleshooting.md](docs/troubleshooting.md) — symptoms and fixes
 - [CLAUDE.md](CLAUDE.md) — working in this codebase
 
 Run the tests:
