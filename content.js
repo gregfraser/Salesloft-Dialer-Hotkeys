@@ -8,7 +8,12 @@
   window.__slHotkeysLoaded = true;
 
   // ---------------- Settings (live-synced) ----------------
-  const settings = { floatingPanel: false, pageOverlay: true, disposition: 'No Answer' };
+  const D = self.SL_DEFAULTS || {};
+  const settings = {
+    floatingPanel: D.floatingPanel ?? false,
+    pageOverlay: D.pageOverlay ?? true,
+    disposition: D.disposition ?? 'No Answer',
+  };
 
   chrome.storage.sync.get(settings, (stored) => {
     Object.assign(settings, stored);
@@ -127,7 +132,11 @@
     try {
       const callBtn = await waitFor(() => buttonByText('Call'));
       realClick(callBtn);
-      setStatus('Dialing…', 'ok');
+      // alerts.js shares this isolated world; repeat its warning here so it's
+      // visible in the floating panel too.
+      const alert = window.__slContactAlert;
+      if (alert) setStatus(`Dialing… ⚠ ${alert.tags.join(' • ')}`, 'warn');
+      else setStatus('Dialing…', 'ok');
     } catch (err) {
       setStatus('No Call button found — is the dialer open?', 'err');
     } finally {
@@ -150,7 +159,8 @@
   function setStatus(msg, kind) {
     if (statusEl) {
       statusEl.textContent = msg;
-      statusEl.style.color = kind === 'err' ? '#ffb4a8' : kind === 'ok' ? '#a8e6b8' : '#e8e6e1';
+      statusEl.style.color =
+        kind === 'err' ? '#ffb4a8' : kind === 'warn' ? '#ffd88a' : kind === 'ok' ? '#a8e6b8' : '#e8e6e1';
     }
     chrome.runtime.sendMessage({ type: 'status', msg, kind }).catch(() => {});
   }

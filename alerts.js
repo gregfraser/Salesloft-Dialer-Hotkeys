@@ -1,0 +1,340 @@
+// Salesloft Dialer Hotkeys — contact alerts
+// Watches the Salesloft page for Disposition / Sentiment tags that mean "don't
+// just dial this person" (No Interest, Meeting Scheduled, Interested) and shows
+// them as a colour-coded toast: blue for a booked meeting, red for a hard no,
+// green for interest.
+//
+// Runs as a content script alongside content.js and shares its isolated world,
+// so content.js can read window.__slContactAlert for its status line.
+
+(function () {
+  'use strict';
+  if (window.__slContactAlertsLoaded) return;
+  window.__slContactAlertsLoaded = true;
+
+  const D = (self.SL_DEFAULTS || {});
+  const settings = {
+    alertsEnabled: D.alertsEnabled !== false,
+    alertTags: D.alertTags || ['No Interest', 'Meeting Scheduled', 'Interested'],
+    alertStrict: D.alertStrict !== false,
+  };
+
+  const TOAST_ID = 'sl-contact-alert';
+  const RESCAN_DEBOUNCE_MS = 600;
+  const POLL_MS = 3000;      // safety net for re-renders the observer sleeps through
+  const MAX_CANDIDATES = 300; // cap the work done on very long activity feeds
+
+  // Never treat text inside these as an existing tag on the contact: they are
+  // either our own UI, or the disposition dropdown the rep is filling in now.
+  const EXCLUDE = [
+    `#${TOAST_ID}`,
+    '#sl-hotkey-overlay',
+    '[data-testid="popout-logger-container"]',
+    '[role="listbox"]',
+    '[role="option"]',
+    '[aria-haspopup="listbox"]',
+    'select',
+    'option',
+  ].join(',');
+
+  const CONTEXT_RE = /\b(sentiment|disposition)\b/i;
+  const CONTEXT_DEPTH = 6;      // ancestors to search for a "Disposition"/"Sentiment" label
+  const CONTEXT_MAX_TEXT = 300; // …but only ones small enough for the label to be attached
+
+  const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+  const titled = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+
+  // ---------------- State ----------------
+  // Declared up front: the settings callback below can fire synchronously and
+  // reaches scheduleScan().
+  let scanTimer = null;
+  let lastSignature = null;  // the matches currently on screen
+  let lastContact = null;    // which contact those matches belong to
+  let dismissed = null;      // { contact, signature } the rep has waved off
+
+  function scheduleScan(delay = RESCAN_DEBOUNCE_MS) {
+    clearTimeout(scanTimer);
+    scanTimer = setTimeout(() => {
+      try { apply(); } catch (e) { /* never let a bad scan break the page */ }
+    }, delay);
+  }
+
+  // ---------------- Settings (live-synced) ----------------
+  chrome.storage.sync.get(settings, (stored) => {
+    Object.assign(settings, stored);
+    settings.alertTags = self.slParseTags(settings.alertTags);
+    scheduleScan(0);
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'sync') return;
+    let touched = false;
+    for (const key of Object.keys(settings)) {
+      if (changes[key]) { settings[key] = changes[key].newValue; touched = true; }
+    }
+    if (!touched) return;
+    settings.alertTags = self.slParseTags(settings.alertTags);
+    dismissed = null;      // changing what we watch for should re-raise anything live
+    lastSignature = null;
+    scheduleScan(0);
+  });
+
+  // ---------------- Scanning ----------------
+  function isVisible(el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    return getComputedStyle(el).visibility !== 'hidden';
+  }
+
+  // In an activity table the label is the column header, which can sit well
+  // outside the ancestor walk below. Match the cell to its header by index.
+  function columnLabel(el) {
+    const cell = el.closest('td, th');
+    const table = cell && cell.closest('table');
+    if (!table) return null;
+    const index = [...cell.parentElement.children].indexOf(cell);
+    const headerRow = table.querySelector('thead tr') || table.querySelector('tr');
+    const header = headerRow && headerRow.children[index];
+    const hit = norm(header && header.textContent).match(CONTEXT_RE);
+    return hit ? titled(hit[1]) : null;
+  }
+
+  // Is this tag sitting next to a "Disposition" or "Sentiment" label? Returns the
+  // label word so the toast can say which field it came from, or null if the tag
+  // is floating on its own (a bare pill, say).
+  function contextFor(el) {
+    const fromColumn = columnLabel(el);
+    if (fromColumn) return fromColumn;
+
+    let node = el;
+    for (let depth = 0; node && depth < CONTEXT_DEPTH; depth++, node = node.parentElement) {
+      if (node === document.body || node === document.documentElement) break;
+
+      const attrs = [
+        node.getAttribute('data-testid'),
+        node.getAttribute('aria-label'),
+        node.id,
+        typeof node.className === 'string' ? node.className : '',
+      ].join(' ');
+      const attrHit = attrs.match(/sentiment|disposition/i);
+      if (attrHit) return titled(attrHit[0]);
+
+      // Only trust a text label from a container small enough that it plausibly
+      // belongs to this value — otherwise a "Disposition" column header three
+      // sections away would claim every tag on the page.
+      const text = norm(node.textContent);
+      if (text.length > CONTEXT_MAX_TEXT) break;
+      const textHit = text.match(CONTEXT_RE);
+      if (textHit) return titled(textHit[1]);
+    }
+    return null;
+  }
+
+  function scan() {
+    if (!settings.alertsEnabled || !document.body) return [];
+    const wanted = new Map(settings.alertTags.map((t) => [t.toLowerCase(), t]));
+    if (!wanted.size) return [];
+
+    // The filter runs against every text node on the page, so reject on a cheap
+    // length check before paying for whitespace normalisation.
+    let maxLen = 0;
+    for (const t of wanted.keys()) maxLen = Math.max(maxLen, t.length);
+
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const raw = node.nodeValue;
+        if (!raw || raw.length < 2 || raw.length > maxLen + 16) return NodeFilter.FILTER_REJECT;
+        const text = norm(raw).toLowerCase();
+        return text && wanted.has(text) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+
+    const found = new Map();
+    let node;
+    let seen = 0;
+    while ((node = walker.nextNode()) && seen++ < MAX_CANDIDATES) {
+      const el = node.parentElement;
+      if (!el || el.closest(EXCLUDE)) continue;
+      if (!isVisible(el)) continue;
+
+      const key = norm(node.nodeValue).toLowerCase();
+      const field = contextFor(el);
+      if (!field && settings.alertStrict) continue;
+      if (found.has(key) && !field) continue; // keep the labelled hit if we have one
+
+      found.set(key, { tag: wanted.get(key), field: field || 'Tag' });
+    }
+    return [...found.values()];
+  }
+
+  // ---------------- Which contact are we looking at? ----------------
+  function contactName() {
+    const selectors = [
+      '[data-testid="person-details-name"]',
+      '[data-testid*="person-name" i]',
+      '[data-testid*="personName" i]',
+      'h1',
+      'h2',
+    ];
+    for (const sel of selectors) {
+      let el;
+      try { el = document.querySelector(sel); } catch (e) { continue; }
+      const text = norm(el && el.textContent);
+      if (text && text.length <= 60) return text;
+    }
+    return '';
+  }
+
+  const contactKey = () => `${location.pathname}${location.search}|${contactName()}`;
+
+  const signatureOf = (matches) =>
+    matches.map((m) => `${m.field}|${m.tag}`).sort().join(' • ');
+
+  function apply() {
+    const contact = contactKey();
+    if (contact !== lastContact) {
+      lastContact = contact;
+      dismissed = null;        // a new person deserves a fresh warning
+      lastSignature = null;
+    }
+
+    const matches = scan();
+    const signature = signatureOf(matches);
+    if (signature === lastSignature) return;
+    lastSignature = signature;
+
+    if (dismissed && dismissed.contact === contact && dismissed.signature === signature) {
+      return;                  // already waved off for this person
+    }
+    dismissed = null;
+
+    const name = contactName();
+    const tags = matches.map((m) => m.tag);
+    const color = self.slTopColor(tags);
+
+    window.__slContactAlert = matches.length ? { matches, tags, name, color } : null;
+
+    if (!matches.length) {
+      removeToast();
+      report({ tags: [] });
+      return;
+    }
+
+    renderToast(matches, name, color);
+    report({ tags, name, color });
+  }
+
+  // Mirror the alert into the floating panel, which sits in its own window and
+  // can't see this page.
+  function report(payload) {
+    try {
+      chrome.runtime.sendMessage(Object.assign({ type: 'contact-alert' }, payload)).catch(() => {});
+    } catch (e) { /* extension context reloaded — the toast still stands */ }
+  }
+
+  // ---------------- Toast ----------------
+  const ICONS = { blue: '\ud83d\udcc5', red: '\u26d4', green: '\ud83d\udc4d', amber: '\u26a0\ufe0f' };
+
+  function removeToast() {
+    document.getElementById(TOAST_ID)?.remove();
+  }
+
+  function renderToast(matches, name, color) {
+    removeToast();
+    if (!document.body) return;
+    const theme = self.SL_PALETTE[color] || self.SL_PALETTE.amber;
+    const headline = self.SL_HEADLINE[color] || self.SL_HEADLINE.amber;
+
+    const box = document.createElement('div');
+    box.id = TOAST_ID;
+    box.setAttribute('role', 'status');
+    box.style.cssText = [
+      'position:fixed', 'top:14px', 'left:50%', 'transform:translateX(-50%)',
+      'z-index:2147483000', 'display:flex', 'align-items:flex-start', 'gap:10px',
+      'max-width:min(560px,calc(100vw - 32px))', 'box-sizing:border-box',
+      'padding:12px 14px', 'border-radius:10px',
+      `background:${theme.bg}`, `border:1px solid ${theme.border}`,
+      'box-shadow:0 6px 24px rgba(0,0,0,.45)',
+      'font-family:system-ui,sans-serif', 'font-size:13px', 'line-height:1.35',
+      'color:#e8e6e1', 'user-select:none',
+    ].join(';');
+
+    const icon = document.createElement('div');
+    icon.textContent = ICONS[color] || ICONS.amber;
+    icon.style.cssText = 'font-size:18px;line-height:1.1;flex-shrink:0;';
+
+    const body = document.createElement('div');
+    body.style.cssText = 'flex:1;min-width:0;';
+
+    const title = document.createElement('div');
+    title.textContent = name ? `${name} — ${headline}` : headline;
+    title.style.cssText = `font-weight:600;color:${theme.text};margin-bottom:5px;`;
+
+    // Every tag keeps its own colour, so a red "No Interest" still reads red even
+    // when a blue "Meeting Scheduled" sets the toast's colour.
+    const chips = document.createElement('div');
+    chips.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+    for (const m of matches) {
+      const tagTheme = self.SL_PALETTE[self.slColorFor(m.tag)] || self.SL_PALETTE.amber;
+      const chip = document.createElement('span');
+      chip.textContent = m.field === 'Tag' ? m.tag : `${m.field}: ${m.tag}`;
+      chip.style.cssText = [
+        'padding:2px 9px', 'border-radius:999px',
+        `border:1px solid ${tagTheme.border}`, `background:${tagTheme.bg}`,
+        `color:${tagTheme.text}`, 'font-size:12px', 'font-weight:600',
+        'white-space:nowrap',
+      ].join(';');
+      chips.appendChild(chip);
+    }
+
+    const close = document.createElement('button');
+    close.textContent = '\u2715';
+    close.title = 'Dismiss for this contact';
+    close.setAttribute('aria-label', 'Dismiss alert for this contact');
+    close.style.cssText = [
+      'flex-shrink:0', 'background:none', 'border:none', 'cursor:pointer',
+      'color:#e8e6e1', 'opacity:.7', 'font-size:14px', 'line-height:1',
+      'padding:2px 4px',
+    ].join(';');
+    close.addEventListener('click', () => {
+      dismissed = { contact: contactKey(), signature: signatureOf(matches) };
+      removeToast();
+    });
+
+    body.appendChild(title);
+    body.appendChild(chips);
+    box.appendChild(icon);
+    box.appendChild(body);
+    box.appendChild(close);
+    document.body.appendChild(box);
+  }
+
+  // ---------------- Rescan triggers ----------------
+  const observer = new MutationObserver((records) => {
+    // Ignore the mutations we cause ourselves.
+    for (const r of records) {
+      const target = r.target.nodeType === 1 ? r.target : r.target.parentElement;
+      if (target && target.closest && target.closest(`#${TOAST_ID}`)) continue;
+      return scheduleScan();
+    }
+  });
+
+  function startObserving() {
+    if (!document.body) return setTimeout(startObserving, 200);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    scheduleScan(0);
+  }
+
+  startObserving();
+  setInterval(() => scheduleScan(0), POLL_MS);
+
+  // Let the settings popup / panel ask for a re-check on demand.
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg && msg.type === 'rescan-alerts') {
+      lastSignature = null;
+      dismissed = null;
+      scheduleScan(0);
+    }
+    sendResponse({ ok: true });
+  });
+})();
