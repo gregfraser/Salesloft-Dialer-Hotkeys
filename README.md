@@ -44,7 +44,10 @@ Look in the **top-right corner** of that page for a small toggle labeled **Devel
 
 ### Step 4 — Load the extension
 
-Three new buttons will appear near the top-left. Click **Load unpacked**, then find and select the folder from Step 1 — the one with `manifest.json` inside it — and click **Select Folder**.
+Three new buttons will appear near the top-left. Click **Load unpacked**, then open the folder from Step 1 and select the **`extension`** folder inside it — the one with `manifest.json` in it — and click **Select Folder**.
+
+> [!IMPORTANT]
+> **Updating from version 1.1?** The extension files moved into an `extension` subfolder to make room for the transcription server. Chrome will not find them on its own: go to `chrome://extensions`, remove the old **Salesloft Dialer Hotkeys** card, and load it again pointing at the new `extension` folder. Your settings are kept.
 
 ### Step 5 — Pin it to your toolbar
 
@@ -123,6 +126,89 @@ Click the extension's icon in your toolbar to open settings:
 | **Tags to watch** | Which tags trigger an alert, comma separated. Starts with No Interest, Meeting Scheduled, Interested. Each one must match Salesloft's wording exactly. The coloured pills underneath show you what each tag will look like. |
 | **Strict matching** | On by default: only counts a tag where Salesloft actually renders one — a pill on a logged call or meeting, a labelled Disposition/Sentiment field, or an activity table column. Keeps ordinary text like "we had a meeting scheduled last quarter" from setting it off. Turn it off only if your layout shows these tags somewhere unusual and you're not getting alerts. |
 | **Edit shortcuts** | Opens Chrome's shortcut settings if <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd>/<kbd>0</kbd> conflicts with something else or you'd prefer different keys. |
+| **Live transcription** | Turns the transcript panel on. Needs the transcription server running — see below. |
+| **Start automatically** | Begins transcribing as soon as a call is detected, instead of you starting it by hand. |
+| **Save transcripts** | Saves the text of each call when it ends. Off by default. Text only — never audio. |
+| **Call audio output** | Which device you actually listen on. Get this wrong and the call plays somewhere you can't hear it. |
+
+
+---
+
+## Live transcription (optional)
+
+Shows you what the prospect just said, as text, while you're still on the call.
+It runs entirely on your own machine — no audio is recorded, saved, or sent
+anywhere.
+
+### One-time setup
+
+You need Python 3.10 or newer installed. Then, from the folder you downloaded:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+That takes a few minutes — it downloads the speech model so your first call
+isn't spent waiting.
+
+### Each day
+
+Start the server before your call block and leave the window open:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start-server.ps1
+```
+
+Then turn on **Live transcription** in the extension settings. Click
+**Test server** to confirm the two are talking to each other.
+
+### Starting it on a call
+
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>8</kbd> **while you're looking at the
+Salesloft tab**.
+
+That "while you're looking at the Salesloft tab" part matters. Chrome only lets
+the extension listen to a tab you were actually on when you pressed the key — so
+unlike the dial hotkeys, this one won't work from LinkedIn. Once it's started it
+keeps going, and you can switch tabs freely for the rest of the call.
+
+If you see **"Transcription not armed"**, that's what happened. Switch back to
+Salesloft and press it again.
+
+### Reading it
+
+The transcript appears in the floating panel. Scroll up to read something
+earlier and it stops auto-scrolling; scroll back to the bottom and it resumes.
+The buttons along the top are pause, copy everything, save as a text file, and
+clear.
+
+> [!TIP]
+> Treat the transcript as an aid, not a record of truth. Phone audio is
+> compressed and speech recognition gets names, acronyms and numbers wrong more
+> often than ordinary words — which is exactly the content worth double-checking
+> before you read it back.
+
+### If something looks wrong
+
+[docs/troubleshooting.md](docs/troubleshooting.md) covers the common ones —
+can't hear the prospect, "not armed", "offline", the transcript falling behind,
+and lines appearing that were never said.
+
+---
+
+## For developers
+
+- [docs/architecture.md](docs/architecture.md) — how the pieces fit together and why
+- [docs/troubleshooting.md](docs/troubleshooting.md) — symptoms and fixes
+- [CLAUDE.md](CLAUDE.md) — working in this codebase
+
+Run the tests:
+
+```bash
+python -m pytest tests/                        # server, protocol, benchmark
+node --test tests/test_salesloft_detection.js  # Salesloft DOM detection
+node --test tests/test_pcm_worklet.js          # audio downsampling
+```
 
 ---
 
@@ -157,8 +243,9 @@ Check the **Disposition** field in settings — it must match your Salesloft dro
 
 First make sure the version of the extension you loaded actually has this
 feature — open settings (click the extension icon) and look for a **CONTACT
-ALERTS** section. No section means you're running an older build; reload the
-folder at `chrome://extensions`.
+ALERTS** section. No section means you're running an older build — go to
+`chrome://extensions` and reload it, making sure you pointed Chrome at the
+**`extension`** folder (Step 4).
 
 If the section is there, check that the tag in **Tags to watch** matches
 Salesloft's wording exactly — "No Interest" and "Not Interested" are different
@@ -187,3 +274,5 @@ The folder from Step 1 probably got moved or deleted. Put it back (or download i
 - It doesn't store your calls, contacts, or any prospect data anywhere. It just clicks the same buttons you would click, faster.
 - Contact alerts only read what's already on the page in front of you. Nothing about a contact is sent anywhere or saved.
 - The red button never logs a call without setting the disposition first — if any step fails, it stops and tells you, rather than logging something half-finished.
+- Transcription runs on your own machine. Audio is never recorded, never written to disk, and never sent over the internet — it exists in memory for a few seconds and is discarded. Transcript text is only saved if you turn that on.
+- If transcription breaks, it goes quiet and the call carries on. It will never interrupt you mid-conversation with a popup.

@@ -1,22 +1,38 @@
-// Salesloft Dialer Hotkeys — shared settings defaults and small helpers.
-// Loaded by the service worker (importScripts), the content scripts, and the
-// settings/panel pages, so every context agrees on the same default values.
+// Shared settings defaults.
+//
+// Loaded as a plain script by every context (content script via the manifest,
+// service worker via importScripts, panel and settings via a <script> tag), so
+// there is exactly one definition of what a fresh install looks like.
 
-(function (scope) {
+(function (root) {
   'use strict';
 
-  scope.SL_DEFAULTS = {
+  const DEFAULTS = {
+    // -- dialer (existing behaviour) --
     floatingPanel: false,
     pageOverlay: true,
     disposition: 'No Answer',
 
-    // Contact alerts: flag Disposition / Sentiment tags already on the contact's
-    // page so you know what you're walking into before you dial.
+    // -- transcription --
+    transcription: false,          // master switch, off until opted into
+    autoStartTranscription: true,  // arm capture when a call is detected
+    saveTranscripts: false,        // PR-8: opt-in, text only
+    // Empty means the system default output device. See docs/troubleshooting.md:
+    // if the rep's headset is not the Windows default, passthrough plays the
+    // call somewhere they cannot hear it.
+    outputDeviceId: '',
+    serverUrl: 'ws://127.0.0.1:8765/transcribe',
+    healthUrl: 'http://127.0.0.1:8765/health',
+
+    // -- contact alerts --
     alertsEnabled: true,
     alertTags: ['No Interest', 'Meeting Scheduled', 'Interested'],
     alertStrict: true,
   };
 
+  root.SL_DEFAULTS = DEFAULTS;
+
+  // ---------------- Contact alert colours ----------------
   // What colour each tag gets. Anything unrecognised falls back to amber.
   const TAG_COLORS = {
     'meeting scheduled': 'blue',
@@ -26,7 +42,7 @@
     'do not contact': 'red',
   };
 
-  scope.slColorFor = function (tag) {
+  root.slColorFor = function (tag) {
     return TAG_COLORS[String(tag || '').replace(/\s+/g, ' ').trim().toLowerCase()] || 'amber';
   };
 
@@ -35,21 +51,21 @@
   // Each tag still keeps its own colour on its chip.
   const PRIORITY = ['blue', 'red', 'green', 'amber'];
 
-  scope.slTopColor = function (tags) {
-    const present = new Set((tags || []).map(scope.slColorFor));
+  root.slTopColor = function (tags) {
+    const present = new Set((tags || []).map(root.slColorFor));
     return PRIORITY.find((c) => present.has(c)) || 'amber';
   };
 
   // Palette for the on-page toast and the floating panel. Tuned for the dark
   // surfaces both already use.
-  scope.SL_PALETTE = {
+  root.SL_PALETTE = {
     red:   { bg: '#3a1d1a', border: '#c0392b', text: '#ffb4a8' },
     blue:  { bg: '#17263a', border: '#2f6fd0', text: '#a8ccff' },
     green: { bg: '#1b3326', border: '#1e7e46', text: '#a8e6b8' },
     amber: { bg: '#3a3320', border: '#b8860b', text: '#ffd88a' },
   };
 
-  scope.SL_HEADLINE = {
+  root.SL_HEADLINE = {
     blue:  'Meeting already scheduled',
     red:   'No interest logged',
     green: 'Marked interested',
@@ -58,7 +74,7 @@
 
   // "No Interest, Meeting Scheduled" -> ['No Interest', 'Meeting Scheduled'].
   // Accepts an array too, so it can also sanitise whatever is in storage.
-  scope.slParseTags = function (value) {
+  root.slParseTags = function (value) {
     const list = Array.isArray(value) ? value : String(value ?? '').split(',');
     const seen = new Set();
     const out = [];
@@ -70,4 +86,8 @@
     }
     return out;
   };
-})(typeof self !== 'undefined' ? self : this);
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { DEFAULTS };
+  }
+})(typeof self !== 'undefined' ? self : globalThis);

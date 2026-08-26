@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Dialer audio capture</title>
+</head>
+<body>
+  <!--
+    Hidden document that owns the audio graph and the WebSocket.
+
+    MV3 service workers terminate after ~30s idle and cannot hold MediaStream
+    objects, so neither can live there. This is Chrome's sanctioned home for
+    long-lived media work.
+  -->
+  <script src="defaults.js"></script>
+  <script src="offscreen.js"></script>
+</body>
+</html>

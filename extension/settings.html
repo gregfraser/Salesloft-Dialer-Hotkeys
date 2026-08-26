@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <style>
     body {
-      width: 260px;
+      width: 290px;
       margin: 0;
       padding: 14px;
       background: #1c1e21;
@@ -13,6 +13,10 @@
       font-size: 13px;
     }
     h1 { font-size: 13px; margin: 0 0 12px; font-weight: 600; letter-spacing: .02em; }
+    h2 {
+      font-size: 11px; margin: 16px 0 4px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .06em; color: #9aa0a6;
+    }
     .setting {
       display: flex;
       align-items: center;
@@ -24,6 +28,8 @@
     .setting:has(+ .footer) { border-bottom: none; }
     .name { flex: 1; }
     .hint { display: block; opacity: .55; font-size: 11px; margin-top: 2px; }
+    .setting.stacked { display: block; }
+    .setting.stacked select { width: 100%; margin-top: 6px; }
 
     /* toggle switch */
     .switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
@@ -43,29 +49,38 @@
       width: 110px; padding: 5px 8px; border: 1px solid #3a3d42;
       border-radius: 6px; background: #26282c; color: #e8e6e1; font-size: 12px;
     }
-    .stacked { display: block; padding: 8px 0; border-bottom: 1px solid #2c2f34; }
-    .stacked textarea {
+    select {
+      padding: 5px 8px; border: 1px solid #3a3d42; border-radius: 6px;
+      background: #26282c; color: #e8e6e1; font-size: 12px;
+    }
+    .setting.stacked textarea {
       width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical;
       min-height: 46px; padding: 5px 8px; border: 1px solid #3a3d42;
       border-radius: 6px; background: #26282c; color: #e8e6e1;
       font-family: inherit; font-size: 12px;
-    }
-    .section {
-      margin: 14px 0 2px; font-size: 11px; text-transform: uppercase;
-      letter-spacing: .06em; opacity: .5;
     }
     .swatches { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
     .swatch {
       padding: 2px 8px; border-radius: 999px; border: 1px solid;
       font-size: 11px; font-weight: 600; white-space: nowrap;
     }
-    .footer { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .notice {
+      margin-top: 8px; padding: 8px; border-radius: 6px;
+      background: #26282c; border: 1px solid #3a3d42;
+      font-size: 11px; line-height: 1.45; color: #c9c6c0;
+    }
+    .notice strong { color: #e8e6e1; }
+    .footer { margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .footer button {
       background: none; border: 1px solid #3a3d42; color: #e8e6e1;
       border-radius: 6px; padding: 5px 10px; font-size: 11px; cursor: pointer;
     }
     .footer button:hover { border-color: #5a5e66; }
     #saved { font-size: 11px; color: #a8e6b8; opacity: 0; transition: opacity .2s; }
+    #server-state { font-size: 11px; margin-top: 6px; min-height: 14px; color: #9aa0a6; }
+    #server-state.ok { color: #a8e6b8; }
+    #server-state.err { color: #ffb4a8; }
+    .disabled-group { opacity: .45; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -101,7 +116,7 @@
     <input type="text" id="disposition" />
   </div>
 
-  <div class="section">Contact alerts</div>
+  <h2>Contact alerts</h2>
 
   <div class="setting">
     <div class="name">
@@ -114,7 +129,7 @@
     </label>
   </div>
 
-  <div class="stacked">
+  <div class="setting stacked">
     <div class="name">
       Tags to watch
       <span class="hint">Comma separated, matched exactly</span>
@@ -134,8 +149,64 @@
     </label>
   </div>
 
+  <h2>Live transcription</h2>
+
+  <div class="setting">
+    <div class="name">
+      Live transcription
+      <span class="hint">Needs the local server running</span>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="transcription" />
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div id="transcription-group">
+    <div class="setting">
+      <div class="name">
+        Start automatically
+        <span class="hint">Begin when a call is detected</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="autoStartTranscription" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="setting">
+      <div class="name">
+        Save transcripts
+        <span class="hint">Text only, never audio</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="saveTranscripts" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="setting stacked">
+      <div class="name">
+        Call audio output
+        <span class="hint">Must be the device you actually listen on</span>
+      </div>
+      <select id="outputDeviceId">
+        <option value="">System default</option>
+      </select>
+    </div>
+
+    <div class="notice">
+      <strong>Before your first live call:</strong> confirm you can still hear the
+      prospect. Capturing tab audio moves it off the normal output path, and the
+      extension routes it back — verify that on a real call, not a test tone.
+    </div>
+
+    <div id="server-state"></div>
+  </div>
+
   <div class="footer">
     <button id="shortcuts">Edit shortcuts</button>
+    <button id="test-server">Test server</button>
     <span id="saved">Saved ✓</span>
   </div>
 
