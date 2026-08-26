@@ -8,7 +8,7 @@
   window.__slHotkeysLoaded = true;
 
   // ---------------- Settings (live-synced) ----------------
-  const settings = { floatingPanel: false, pageOverlay: true, disposition: 'No Answer' };
+  const settings = Object.assign({}, window.SL_DEFAULTS);
 
   chrome.storage.sync.get(settings, (stored) => {
     Object.assign(settings, stored);
@@ -211,4 +211,40 @@
     },
     true
   );
+
+  // ---------------- Call state detection (PR-1, observe only) ----------------
+  // This path never clicks anything. It watches for the End Call control and
+  // reports transitions so the background worker can start and stop
+  // transcription. Keeping observation and automation separate is what stops a
+  // detection bug from ever mis-logging a call.
+  let lastCallState = null;
+  let detectTimer = null;
+
+  function reportCallState() {
+    if (!window.SLCallDetect) return;
+    const detector = window.SLCallDetect;
+    // detectState swallows its own errors and resolves to IDLE, so a Salesloft
+    // DOM change degrades to "no transcription", never to a thrown error.
+    const result = detector.detectState(detector.liveOptions(document));
+    if (result.state === lastCallState) return;
+    lastCallState = result.state;
+    chrome.runtime
+      .sendMessage({ type: 'call-state', state: result.state, tier: result.tier })
+      .catch(() => {});
+  }
+
+  function scheduleDetect() {
+    // Salesloft's React tree mutates constantly; debounce so this costs
+    // nothing measurable during a call.
+    clearTimeout(detectTimer);
+    detectTimer = setTimeout(reportCallState, 250);
+  }
+
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(scheduleDetect).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+    reportCallState();
+  }
 })();

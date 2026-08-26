@@ -1,0 +1,50 @@
+# Salesloft Live Transcriber -- service configuration.
+# Every key here has a default in config.py; this file only records choices.
+
+sample_rate: 16000
+frame_samples: 512          # Silero VAD requires exactly 512 samples at 16kHz
+
+transcription:
+  model: small.en           # set by the Phase 0 benchmark (scripts/benchmark.py)
+  device: cpu
+  compute_type: int8
+  language: en
+  beam_size: 1
+  initial_prompt: >-
+    Discussion of requirements management, traceability, IEC 62304,
+    ISO 13485, FDA 510(k), design history file, DHF, verification and
+    validation, Polarion, Codebeamer, Jama Connect, predicate device.
+  vad_filter: false                 # we gate upstream; a second pass adds nothing
+  condition_on_previous_text: false # the classic hallucination-loop amplifier
+  max_queue_depth: 3                # beyond this, utterances are coalesced
+  max_merge_seconds: 25.0           # stay inside Whisper's 30s window
+  merge_gap_ms: 200
+  # Hallucination filters. Whisper invents fluent text on silence and hold
+  # music, and a line the prospect never said is worse than no line at all.
+  max_no_speech_prob: 0.6
+  min_avg_logprob: -1.0
+  max_compression_ratio: 2.4
+  drop_blocklisted_short_segments: true
+
+vad:
+  enabled: true
+  speech_threshold: 0.5
+  silence_threshold_ms: 500
+  max_utterance_seconds: 12
+  min_utterance_ms: 250
+  pre_roll_ms: 300
+  post_roll_ms: 200
+  speech_start_frames: 2
+
+server:
+  host: 127.0.0.1           # never 0.0.0.0
+  port: 8765
+  allowed_origins:
+    - "chrome-extension://"
+  allow_no_origin: true     # scripts/replay_wav.py sends no Origin header
+  lower_process_priority: true
+
+storage:
+  save_transcripts: false   # opt-in, text only
+  transcript_dir: "~/Documents/salesloft-transcripts"
+  save_audio: false         # not implementable; present as an assertion
