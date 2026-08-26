@@ -14,9 +14,10 @@
     disposition: 'No Answer',
 
     // -- transcription --
+    // The master switch is the only choice: with it on, transcription always
+    // starts when a call is detected and the transcript (text only, never
+    // audio) is always saved when the call ends.
     transcription: false,          // master switch, off until opted into
-    autoStartTranscription: true,  // arm capture when a call is detected
-    saveTranscripts: false,        // PR-8: opt-in, text only
     // Empty means the system default output device. See docs/troubleshooting.md:
     // if the rep's headset is not the Windows default, passthrough plays the
     // call somewhere they cannot hear it.

@@ -9,8 +9,8 @@
 importScripts('defaults.js');
 
 const DEFAULTS = self.SL_DEFAULTS;
-const PANEL = { url: 'panel.html', width: 320, height: 190 };
-const PANEL_WITH_TRANSCRIPT = { width: 380, height: 520 };
+const PANEL = { url: 'panel.html', width: 420, height: 260 };
+const PANEL_WITH_TRANSCRIPT = { width: 500, height: 720 };
 const SALESLOFT_URL = 'https://app.salesloft.com/*';
 const SALESLOFT_ORIGIN = 'https://app.salesloft.com/';
 const OFFSCREEN_URL = 'offscreen.html';
@@ -252,7 +252,7 @@ async function onCallStateChange(callState, tabId) {
   if (!settings.transcription) return;
 
   if (callState === 'IN_CALL') {
-    if (!settings.autoStartTranscription) return;
+    // Transcription on means auto-start: begin the moment a call is detected.
     const callId = crypto.randomUUID();
     await startTranscription(tabId);
     if (transcriptionState === STATE.TRANSCRIBING) {

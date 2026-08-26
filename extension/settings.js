@@ -16,8 +16,6 @@ const els = {
   alertStrict: document.getElementById('alertStrict'),
   swatches: document.getElementById('swatches'),
   transcription: document.getElementById('transcription'),
-  autoStartTranscription: document.getElementById('autoStartTranscription'),
-  saveTranscripts: document.getElementById('saveTranscripts'),
   outputDeviceId: document.getElementById('outputDeviceId'),
   transcriptionGroup: document.getElementById('transcription-group'),
   serverState: document.getElementById('server-state'),
@@ -35,8 +33,6 @@ chrome.storage.sync.get(DEFAULTS, (settings) => {
   els.alertTags.value = slParseTags(settings.alertTags).join(', ');
   paintSwatches();
   els.transcription.checked = settings.transcription;
-  els.autoStartTranscription.checked = settings.autoStartTranscription;
-  els.saveTranscripts.checked = settings.saveTranscripts;
   populateOutputDevices(settings.outputDeviceId);
   syncTranscriptionGroup();
 });
@@ -114,14 +110,6 @@ els.transcription.addEventListener('change', () => {
     chrome.runtime.sendMessage({ type: 'arm-transcription' }).catch(() => {});
     checkServer();
   }
-});
-
-els.autoStartTranscription.addEventListener('change', () => {
-  persist('autoStartTranscription', els.autoStartTranscription.checked);
-});
-
-els.saveTranscripts.addEventListener('change', () => {
-  persist('saveTranscripts', els.saveTranscripts.checked);
 });
 
 els.outputDeviceId.addEventListener('change', () => {

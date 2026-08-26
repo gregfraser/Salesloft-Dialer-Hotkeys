@@ -27,6 +27,7 @@ const view = {
   paused: false,
   callStart: null,
   timerHandle: null,
+  unsaved: false, // lines added since the last save — drives the call-end auto-save
 };
 
 // ------------------------------------------------------------ dialer actions
@@ -107,6 +108,7 @@ function addEntry(payload) {
   entry.appendChild(text);
   els.transcript.appendChild(entry);
   view.entries.push({ start: payload.start || 0, text: payload.text });
+  view.unsaved = true;
 
   if (view.autoScroll) {
     els.transcript.scrollTop = els.transcript.scrollHeight;
@@ -165,8 +167,7 @@ els.copy.addEventListener('click', async () => {
   }
 });
 
-els.save.addEventListener('click', () => {
-  if (!view.entries.length) { setStatus('Nothing to save'); return; }
+function saveTranscript() {
   // Text only, never audio, and the filename carries no prospect details.
   const blob = new Blob([transcriptAsText()], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
@@ -176,7 +177,13 @@ els.save.addEventListener('click', () => {
   link.download = `transcript_${stamp}.txt`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  view.unsaved = false;
   setStatus('Transcript saved', 'ok');
+}
+
+els.save.addEventListener('click', () => {
+  if (!view.entries.length) { setStatus('Nothing to save'); return; }
+  saveTranscript();
 });
 
 els.clear.addEventListener('click', () => {
@@ -244,6 +251,10 @@ chrome.runtime.onMessage.addListener((msg) => {
       if (empty) empty.textContent = 'Listening…';
     } else {
       stopTimer();
+      // Transcription on means the transcript is always kept: save whatever
+      // this call produced the moment it ends, silently — no prompt, no focus
+      // steal, and never twice for the same lines.
+      if (view.unsaved && view.entries.length) saveTranscript();
     }
   }
 });

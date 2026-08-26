@@ -126,9 +126,7 @@ Click the extension's icon in your toolbar to open settings:
 | **Tags to watch** | Which tags trigger an alert, comma separated. Starts with No Interest, Meeting Scheduled, Interested. Each one must match Salesloft's wording exactly. The coloured pills underneath show you what each tag will look like. |
 | **Strict matching** | On by default: only counts a tag where Salesloft actually renders one — a pill on a logged call or meeting, a labelled Disposition/Sentiment field, or an activity table column. Keeps ordinary text like "we had a meeting scheduled last quarter" from setting it off. Turn it off only if your layout shows these tags somewhere unusual and you're not getting alerts. |
 | **Edit shortcuts** | Opens Chrome's shortcut settings if <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd>/<kbd>0</kbd> conflicts with something else or you'd prefer different keys. |
-| **Live transcription** | Turns the transcript panel on. Needs the transcription server running — see below. |
-| **Start automatically** | Begins transcribing as soon as a call is detected, instead of you starting it by hand. |
-| **Save transcripts** | Saves the text of each call when it ends. Off by default. Text only — never audio. |
+| **Live transcription** | Turns the transcript panel on. Transcription then starts by itself as soon as a call is detected, and the transcript is saved automatically when the call ends — text only, never audio. Needs the transcription server running — see below. |
 | **Call audio output** | Which device you actually listen on. Get this wrong and the call plays somewhere you can't hear it. |
 
 

@@ -68,7 +68,7 @@ Four execution contexts in Chrome plus one Python process. Understanding any fea
 
 ### Settings
 
-`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `disposition`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `autoStartTranscription`, `saveTranscripts`, `outputDeviceId`, `serverUrl`, `healthUrl`).
+`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `disposition`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `outputDeviceId`, `serverUrl`, `healthUrl`). With `transcription` on, auto-start and transcript saving are unconditional — they are behaviours, not settings.
 
 **`extension/defaults.js` is the single definition** — loaded as a plain script by the content script (via the manifest), the service worker (`importScripts`), and both HTML pages (`<script>` before their own). Add new settings there only; do not reintroduce per-file copies.
 

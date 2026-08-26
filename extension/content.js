@@ -26,6 +26,19 @@
 
   const CONFIG = { keyKill: 'F8', keyCall: 'F9', stepTimeout: 8000, autoAdvanceDelayMs: 400 };
 
+  // Reloading or updating the extension invalidates this script's context:
+  // chrome.runtime becomes undefined, but the script (and its overlay) live on
+  // in the page. The dialer flows are pure DOM automation and still work, so a
+  // dead message channel must degrade to "no status broadcast", never to a
+  // thrown error that aborts the flow mid-call.
+  function safeSend(message) {
+    try {
+      if (chrome.runtime && chrome.runtime.id) {
+        chrome.runtime.sendMessage(message).catch(() => {});
+      }
+    } catch (e) { /* context invalidated — on-page status still updates */ }
+  }
+
   // ---------------- DOM helpers ----------------
   const visible = (el) => !!el && el.offsetParent !== null && !el.disabled;
 
@@ -157,7 +170,7 @@
       statusEl.style.color =
         kind === 'err' ? '#ffb4a8' : kind === 'warn' ? '#ffd88a' : kind === 'ok' ? '#a8e6b8' : '#e8e6e1';
     }
-    chrome.runtime.sendMessage({ type: 'status', msg, kind }).catch(() => {});
+    safeSend({ type: 'status', msg, kind });
   }
 
   // ---------------- Optional on-page overlay ----------------
@@ -167,11 +180,19 @@
   }
 
   function buildOverlay() {
-    if (document.getElementById('sl-hotkey-overlay') || !document.body) return;
+    if (!document.body) return;
+    // An overlay may already exist, left behind by a previous copy of this
+    // script whose extension context was invalidated by a reload/update. Its
+    // buttons are wired to that dead context, so always replace it rather
+    // than keep it.
+    removeOverlay();
     const box = document.createElement('div');
     box.id = 'sl-hotkey-overlay';
     box.style.cssText = [
+      // Fixed position AND fixed width: the box must never grow, shrink or
+      // shift as the status text changes length — long messages wrap instead.
       'position:fixed', 'bottom:16px', 'left:16px', 'z-index:999999',
+      'width:240px', 'box-sizing:border-box',
       'display:flex', 'flex-direction:column', 'gap:6px',
       'background:#1c1e21', 'border:1px solid #3a3d42', 'border-radius:10px',
       'padding:10px', 'font-family:system-ui,sans-serif', 'font-size:12px',
@@ -193,7 +214,7 @@
     row.appendChild(mkBtn('▶ Call', `${CONFIG.keyCall} / Ctrl⇧0`, '#1e7e46', startCall));
 
     statusEl = document.createElement('div');
-    statusEl.style.cssText = 'min-height:14px;color:#e8e6e1;';
+    statusEl.style.cssText = 'min-height:14px;color:#e8e6e1;overflow-wrap:break-word;';
     statusEl.textContent = 'Ready';
 
     box.appendChild(row);
@@ -233,9 +254,7 @@
     const result = detector.detectState(detector.liveOptions(document));
     if (result.state === lastCallState) return;
     lastCallState = result.state;
-    chrome.runtime
-      .sendMessage({ type: 'call-state', state: result.state, tier: result.tier })
-      .catch(() => {});
+    safeSend({ type: 'call-state', state: result.state, tier: result.tier });
   }
 
   function scheduleDetect() {
