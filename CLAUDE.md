@@ -61,13 +61,14 @@ Four execution contexts in Chrome plus one Python process. Understanding any fea
 - **`background.js`** (service worker) — the relay and the owner of transcription state (`IDLE → STARTING → TRANSCRIBING → FINALIZING`, plus first-class `DEGRADED`). Finds the most-recently-accessed Salesloft tab, forwards dialer actions, and on failure injects the content scripts via `chrome.scripting` and retries once. Owns the panel window (id in `chrome.storage.session`, so it survives worker sleep), the offscreen document lifecycle, and capture arming.
 - **`content.js`** — runs only on `https://app.salesloft.com/*`; performs the DOM automation, renders the optional overlay, handles in-page F8/F9. Guards double-injection with `window.__slHotkeysLoaded`.
 - **`call-detect.js`** — call-state detection, **observe only**. Takes its DOM access as injected functions (`elements`, `isVisible`) so it is testable without a DOM.
+- **`alerts.js`** — reads the Disposition / Sentiment tags already on the contact's page and raises the colour-coded toast, **read only**. Shares the isolated world with `content.js`, which reads `window.__slContactAlert` for its status line.
 - **`offscreen.js`** + **`pcm-worklet.js`** — hidden document holding the `AudioContext`, the mandatory passthrough, the downsampler and the WebSocket. MV3 service workers terminate after ~30s and cannot hold `MediaStream`s, which is why this exists.
 - **`panel.*`** / **`settings.*`** — thin UIs.
 - **`server/`** — `main.py` (FastAPI + session), `vad.py` (Silero + `Endpointer`), `transcription.py` (`UtteranceQueue`, filters, metrics), `websocket.py` (protocol), `audio.py`, `config.py`.
 
 ### Settings
 
-`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `disposition`) and transcription settings (`transcription`, `autoStartTranscription`, `saveTranscripts`, `outputDeviceId`, `serverUrl`, `healthUrl`).
+`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `disposition`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `autoStartTranscription`, `saveTranscripts`, `outputDeviceId`, `serverUrl`, `healthUrl`).
 
 **`extension/defaults.js` is the single definition** — loaded as a plain script by the content script (via the manifest), the service worker (`importScripts`), and both HTML pages (`<script>` before their own). Add new settings there only; do not reintroduce per-file copies.
 
@@ -89,6 +90,14 @@ Transcript and status messages from the offscreen document reach the panel **dir
 - `waitFor()` polls every 100 ms with an 8 s timeout.
 
 Detection in `call-detect.js` uses a tier hierarchy instead: ARIA label → visible text → `data-testid` tokens. Generated styled-components classes (`.sc-imkklV`) are never matched — they change on every Salesloft deploy.
+
+Tag matching in `alerts.js` follows the same rule — the pills it reads are
+`<span class="sc-eSdRwT">`, so it anchors on structure, never on that class:
+
+- A candidate must be an element whose **entire** text is the tag. That is what separates the `Interested` pill from a call note reading "Interested but doesn't work with…".
+- Candidates resolve past custom elements (any tag name containing `-`) before that check. A highlighter extension wrapping a match would otherwise both split the tag across text nodes and make the enclosing note look like a bare tag.
+- Context comes from one of three places, in order: the preceding sibling (Salesloft stacks `<p>Sentiment</p><p>Interested</p>`, and adjacent element text concatenates with no whitespace, so a `\bsentiment\b` match on the parent fails), a table column header by cell index, or simply being inside an activity row (`[class*="activity__"]`) — where Salesloft renders the tags with no label at all. That last one is what makes the feature fire; requiring a label rejects the only place the tags actually live.
+- `[data-testid="popout-logger-container"]` and listbox options are excluded, so the disposition the rep is picking right now never raises an alert about the call they just made.
 
 When Salesloft ships UI changes, these are what break.
 

@@ -25,7 +25,7 @@
       padding: 8px 0;
       border-bottom: 1px solid #2c2f34;
     }
-    .setting:last-of-type { border-bottom: none; }
+    .setting:has(+ .footer) { border-bottom: none; }
     .name { flex: 1; }
     .hint { display: block; opacity: .55; font-size: 11px; margin-top: 2px; }
     .setting.stacked { display: block; }
@@ -52,6 +52,17 @@
     select {
       padding: 5px 8px; border: 1px solid #3a3d42; border-radius: 6px;
       background: #26282c; color: #e8e6e1; font-size: 12px;
+    }
+    .setting.stacked textarea {
+      width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical;
+      min-height: 46px; padding: 5px 8px; border: 1px solid #3a3d42;
+      border-radius: 6px; background: #26282c; color: #e8e6e1;
+      font-family: inherit; font-size: 12px;
+    }
+    .swatches { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
+    .swatch {
+      padding: 2px 8px; border-radius: 999px; border: 1px solid;
+      font-size: 11px; font-weight: 600; white-space: nowrap;
     }
     .notice {
       margin-top: 8px; padding: 8px; border-radius: 6px;
@@ -103,6 +114,39 @@
       <span class="hint">Must match dropdown text exactly</span>
     </div>
     <input type="text" id="disposition" />
+  </div>
+
+  <h2>Contact alerts</h2>
+
+  <div class="setting">
+    <div class="name">
+      Alert on tags
+      <span class="hint">Toast on the page before you dial</span>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="alertsEnabled" />
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="setting stacked">
+    <div class="name">
+      Tags to watch
+      <span class="hint">Comma separated, matched exactly</span>
+    </div>
+    <textarea id="alertTags" rows="2"></textarea>
+    <div class="swatches" id="swatches"></div>
+  </div>
+
+  <div class="setting">
+    <div class="name">
+      Strict matching
+      <span class="hint">Only where Salesloft shows it as a tag</span>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="alertStrict" />
+      <span class="slider"></span>
+    </label>
   </div>
 
   <h2>Live transcription</h2>

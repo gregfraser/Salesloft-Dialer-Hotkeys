@@ -111,7 +111,7 @@ async function sendToSalesloft(action) {
     try {
       await chrome.scripting.executeScript({
         target: { tabId: target.id },
-        files: ['defaults.js', 'call-detect.js', 'content.js'],
+        files: ['defaults.js', 'call-detect.js', 'content.js', 'alerts.js'],
       });
       await chrome.tabs.sendMessage(target.id, { type: 'dialer-action', action });
     } catch (e2) {

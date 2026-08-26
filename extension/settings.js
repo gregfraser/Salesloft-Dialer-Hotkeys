@@ -11,6 +11,10 @@ const els = {
   floatingPanel: document.getElementById('floatingPanel'),
   pageOverlay: document.getElementById('pageOverlay'),
   disposition: document.getElementById('disposition'),
+  alertsEnabled: document.getElementById('alertsEnabled'),
+  alertTags: document.getElementById('alertTags'),
+  alertStrict: document.getElementById('alertStrict'),
+  swatches: document.getElementById('swatches'),
   transcription: document.getElementById('transcription'),
   autoStartTranscription: document.getElementById('autoStartTranscription'),
   saveTranscripts: document.getElementById('saveTranscripts'),
@@ -26,6 +30,10 @@ chrome.storage.sync.get(DEFAULTS, (settings) => {
   els.floatingPanel.checked = settings.floatingPanel;
   els.pageOverlay.checked = settings.pageOverlay;
   els.disposition.value = settings.disposition;
+  els.alertsEnabled.checked = settings.alertsEnabled;
+  els.alertStrict.checked = settings.alertStrict;
+  els.alertTags.value = slParseTags(settings.alertTags).join(', ');
+  paintSwatches();
   els.transcription.checked = settings.transcription;
   els.autoStartTranscription.checked = settings.autoStartTranscription;
   els.saveTranscripts.checked = settings.saveTranscripts;
@@ -42,6 +50,21 @@ function flashSaved() {
 
 function persist(key, value) {
   chrome.storage.sync.set({ [key]: value }, flashSaved);
+}
+
+// Preview of the colour each watched tag will get on the page.
+function paintSwatches() {
+  els.swatches.textContent = '';
+  for (const tag of slParseTags(els.alertTags.value)) {
+    const theme = SL_PALETTE[slColorFor(tag)] || SL_PALETTE.amber;
+    const chip = document.createElement('span');
+    chip.className = 'swatch';
+    chip.textContent = tag;
+    chip.style.background = theme.bg;
+    chip.style.borderColor = theme.border;
+    chip.style.color = theme.text;
+    els.swatches.appendChild(chip);
+  }
 }
 
 function syncTranscriptionGroup() {
@@ -61,6 +84,24 @@ els.disposition.addEventListener('change', () => {
   const value = els.disposition.value.trim() || DEFAULTS.disposition;
   els.disposition.value = value;
   persist('disposition', value);
+});
+
+els.alertsEnabled.addEventListener('change', () => {
+  persist('alertsEnabled', els.alertsEnabled.checked);
+});
+
+els.alertStrict.addEventListener('change', () => {
+  persist('alertStrict', els.alertStrict.checked);
+});
+
+els.alertTags.addEventListener('input', paintSwatches);
+
+els.alertTags.addEventListener('change', () => {
+  const tags = slParseTags(els.alertTags.value);
+  const value = tags.length ? tags : DEFAULTS.alertTags;
+  els.alertTags.value = value.join(', ');
+  paintSwatches();
+  persist('alertTags', value);
 });
 
 els.transcription.addEventListener('change', () => {
