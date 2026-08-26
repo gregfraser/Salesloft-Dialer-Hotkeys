@@ -1,11 +1,13 @@
 // Salesloft Dialer Hotkeys — contact alerts
 // Watches the Salesloft page for Disposition / Sentiment tags that mean "don't
-// just dial this person" (No Interest, Meeting Scheduled, Interested) and shows
-// them as a colour-coded toast: blue for a booked meeting, red for a hard no,
-// green for interest.
+// just dial this person" (No Interest, Meeting Scheduled, Interested). This
+// script only detects: the alert itself renders in the floating panel and as a
+// subtle line inside the on-page button overlay — never as its own popup over
+// the Salesloft UI.
 //
-// Runs as a content script alongside content.js and shares its isolated world,
-// so content.js can read window.__slContactAlert for its status line.
+// Runs as a content script alongside content.js and shares its isolated world:
+// content.js reads window.__slContactAlert and registers
+// window.__slOnContactAlert to repaint its overlay's alert line.
 
 (function () {
   'use strict';
@@ -19,7 +21,7 @@
     alertStrict: D.alertStrict !== false,
   };
 
-  const TOAST_ID = 'sl-contact-alert';
+  const OVERLAY_ID = 'sl-hotkey-overlay';
   const RESCAN_DEBOUNCE_MS = 600;
   const POLL_MS = 3000;      // safety net for re-renders the observer sleeps through
   const MAX_CANDIDATES = 500; // cap the work done on very long activity feeds
@@ -27,8 +29,7 @@
   // Never treat text inside these as an existing tag on the contact: they are
   // either our own UI, or the disposition dropdown the rep is filling in now.
   const EXCLUDE = [
-    `#${TOAST_ID}`,
-    '#sl-hotkey-overlay',
+    `#${OVERLAY_ID}`,
     '[data-testid="popout-logger-container"]',
     '[role="listbox"]',
     '[role="option"]',
@@ -64,7 +65,6 @@
   let scanTimer = null;
   let lastSignature = null;  // the matches currently on screen
   let lastContact = null;    // which contact those matches belong to
-  let dismissed = null;      // { contact, signature } the rep has waved off
 
   function scheduleScan(delay = RESCAN_DEBOUNCE_MS) {
     clearTimeout(scanTimer);
@@ -88,8 +88,7 @@
     }
     if (!touched) return;
     settings.alertTags = self.slParseTags(settings.alertTags);
-    dismissed = null;      // changing what we watch for should re-raise anything live
-    lastSignature = null;
+    lastSignature = null;  // changing what we watch for should re-raise anything live
     scheduleScan(0);
   });
 
@@ -248,7 +247,6 @@
     const contact = contactKey();
     if (contact !== lastContact) {
       lastContact = contact;
-      dismissed = null;        // a new person deserves a fresh warning
       lastSignature = null;
     }
 
@@ -257,25 +255,29 @@
     if (signature === lastSignature) return;
     lastSignature = signature;
 
-    if (dismissed && dismissed.contact === contact && dismissed.signature === signature) {
-      return;                  // already waved off for this person
-    }
-    dismissed = null;
-
     const name = contactName();
     const tags = matches.map((m) => m.tag);
     const color = self.slTopColor(tags);
 
     window.__slContactAlert = matches.length ? { matches, tags, name, color } : null;
+    notifyOverlay();
 
     if (!matches.length) {
-      removeToast();
       report({ tags: [] });
       return;
     }
-
-    renderToast(matches, name, color);
     report({ tags, name, color });
+  }
+
+  // Repaint the subtle alert line inside content.js's button overlay. Same
+  // isolated world, so this is a direct call — no messaging, no popup over
+  // the Salesloft UI.
+  function notifyOverlay() {
+    try {
+      if (typeof window.__slOnContactAlert === 'function') {
+        window.__slOnContactAlert(window.__slContactAlert);
+      }
+    } catch (e) { /* overlay disabled or not built yet */ }
   }
 
   // Mirror the alert into the floating panel, which sits in its own window and
@@ -283,92 +285,16 @@
   function report(payload) {
     try {
       chrome.runtime.sendMessage(Object.assign({ type: 'contact-alert' }, payload)).catch(() => {});
-    } catch (e) { /* extension context reloaded — the toast still stands */ }
-  }
-
-  // ---------------- Toast ----------------
-  const ICONS = { blue: '\ud83d\udcc5', red: '\u26d4', green: '\ud83d\udc4d', amber: '\u26a0\ufe0f' };
-
-  function removeToast() {
-    document.getElementById(TOAST_ID)?.remove();
-  }
-
-  function renderToast(matches, name, color) {
-    removeToast();
-    if (!document.body) return;
-    const theme = self.SL_PALETTE[color] || self.SL_PALETTE.amber;
-    const headline = self.SL_HEADLINE[color] || self.SL_HEADLINE.amber;
-
-    const box = document.createElement('div');
-    box.id = TOAST_ID;
-    box.setAttribute('role', 'status');
-    box.style.cssText = [
-      'position:fixed', 'top:14px', 'left:50%', 'transform:translateX(-50%)',
-      'z-index:2147483000', 'display:flex', 'align-items:flex-start', 'gap:10px',
-      'max-width:min(560px,calc(100vw - 32px))', 'box-sizing:border-box',
-      'padding:12px 14px', 'border-radius:10px',
-      `background:${theme.bg}`, `border:1px solid ${theme.border}`,
-      'box-shadow:0 6px 24px rgba(0,0,0,.45)',
-      'font-family:system-ui,sans-serif', 'font-size:13px', 'line-height:1.35',
-      'color:#e8e6e1', 'user-select:none',
-    ].join(';');
-
-    const icon = document.createElement('div');
-    icon.textContent = ICONS[color] || ICONS.amber;
-    icon.style.cssText = 'font-size:18px;line-height:1.1;flex-shrink:0;';
-
-    const body = document.createElement('div');
-    body.style.cssText = 'flex:1;min-width:0;';
-
-    const title = document.createElement('div');
-    title.textContent = name ? `${name} — ${headline}` : headline;
-    title.style.cssText = `font-weight:600;color:${theme.text};margin-bottom:5px;`;
-
-    // Every tag keeps its own colour, so a red "No Interest" still reads red even
-    // when a blue "Meeting Scheduled" sets the toast's colour.
-    const chips = document.createElement('div');
-    chips.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
-    for (const m of matches) {
-      const tagTheme = self.SL_PALETTE[self.slColorFor(m.tag)] || self.SL_PALETTE.amber;
-      const chip = document.createElement('span');
-      chip.textContent = m.field === 'Tag' ? m.tag : `${m.field}: ${m.tag}`;
-      chip.style.cssText = [
-        'padding:2px 9px', 'border-radius:999px',
-        `border:1px solid ${tagTheme.border}`, `background:${tagTheme.bg}`,
-        `color:${tagTheme.text}`, 'font-size:12px', 'font-weight:600',
-        'white-space:nowrap',
-      ].join(';');
-      chips.appendChild(chip);
-    }
-
-    const close = document.createElement('button');
-    close.textContent = '\u2715';
-    close.title = 'Dismiss for this contact';
-    close.setAttribute('aria-label', 'Dismiss alert for this contact');
-    close.style.cssText = [
-      'flex-shrink:0', 'background:none', 'border:none', 'cursor:pointer',
-      'color:#e8e6e1', 'opacity:.7', 'font-size:14px', 'line-height:1',
-      'padding:2px 4px',
-    ].join(';');
-    close.addEventListener('click', () => {
-      dismissed = { contact: contactKey(), signature: signatureOf(matches) };
-      removeToast();
-    });
-
-    body.appendChild(title);
-    body.appendChild(chips);
-    box.appendChild(icon);
-    box.appendChild(body);
-    box.appendChild(close);
-    document.body.appendChild(box);
+    } catch (e) { /* extension context reloaded — the panel will catch up */ }
   }
 
   // ---------------- Rescan triggers ----------------
   const observer = new MutationObserver((records) => {
-    // Ignore the mutations we cause ourselves.
+    // Ignore mutations inside the button overlay — the alert line and status
+    // text we (and content.js) write there must not retrigger the scan.
     for (const r of records) {
       const target = r.target.nodeType === 1 ? r.target : r.target.parentElement;
-      if (target && target.closest && target.closest(`#${TOAST_ID}`)) continue;
+      if (target && target.closest && target.closest(`#${OVERLAY_ID}`)) continue;
       return scheduleScan();
     }
   });
@@ -386,7 +312,6 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg && msg.type === 'rescan-alerts') {
       lastSignature = null;
-      dismissed = null;
       scheduleScan(0);
     }
     sendResponse({ ok: true });

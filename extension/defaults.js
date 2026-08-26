@@ -47,7 +47,7 @@
     return TAG_COLORS[String(tag || '').replace(/\s+/g, ' ').trim().toLowerCase()] || 'amber';
   };
 
-  // When several tags are on the page at once, this decides the toast's own
+  // When several tags are on the page at once, this decides the alert's own
   // colour: a booked meeting outranks everything, then a hard no, then interest.
   // Each tag still keeps its own colour on its chip.
   const PRIORITY = ['blue', 'red', 'green', 'amber'];
@@ -57,8 +57,8 @@
     return PRIORITY.find((c) => present.has(c)) || 'amber';
   };
 
-  // Palette for the on-page toast and the floating panel. Tuned for the dark
-  // surfaces both already use.
+  // Palette for the overlay's alert line and the floating panel. Tuned for the
+  // dark surfaces both already use.
   root.SL_PALETTE = {
     red:   { bg: '#3a1d1a', border: '#c0392b', text: '#ffb4a8' },
     blue:  { bg: '#17263a', border: '#2f6fd0', text: '#a8ccff' },

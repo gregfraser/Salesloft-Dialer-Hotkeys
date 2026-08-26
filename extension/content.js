@@ -174,10 +174,34 @@
   }
 
   // ---------------- Optional on-page overlay ----------------
+  let alertEl;
+
   function removeOverlay() {
     document.getElementById('sl-hotkey-overlay')?.remove();
     statusEl = null;
+    alertEl = null;
   }
+
+  // Subtle mirror of the contact alert inside the overlay — one tinted line,
+  // nothing floating over the Salesloft UI. alerts.js computes the alert and
+  // calls the hook below from the shared isolated world.
+  function renderOverlayAlert(alert) {
+    if (!alertEl) return;
+    if (!alert || !alert.tags || !alert.tags.length) {
+      alertEl.style.display = 'none';
+      alertEl.textContent = '';
+      return;
+    }
+    const theme = (window.SL_PALETTE || {})[alert.color] ||
+      { bg: '#3a3320', border: '#b8860b', text: '#ffd88a' };
+    const headline = (window.SL_HEADLINE || {})[alert.color] || 'Heads up before you dial';
+    alertEl.textContent = `${headline} — ${alert.tags.join(' • ')}`;
+    alertEl.style.background = theme.bg;
+    alertEl.style.borderColor = theme.border;
+    alertEl.style.color = theme.text;
+    alertEl.style.display = 'block';
+  }
+  window.__slOnContactAlert = renderOverlayAlert;
 
   function buildOverlay() {
     if (!document.body) return;
@@ -213,13 +237,21 @@
     row.appendChild(mkBtn('✕ No Answer', `${CONFIG.keyKill} / Ctrl⇧9`, '#c0392b', killAndLog));
     row.appendChild(mkBtn('▶ Call', `${CONFIG.keyCall} / Ctrl⇧0`, '#1e7e46', startCall));
 
+    alertEl = document.createElement('div');
+    alertEl.style.cssText = [
+      'display:none', 'padding:4px 8px', 'border:1px solid', 'border-radius:6px',
+      'font-size:11px', 'font-weight:600', 'line-height:1.35', 'overflow-wrap:break-word',
+    ].join(';');
+
     statusEl = document.createElement('div');
     statusEl.style.cssText = 'min-height:14px;color:#e8e6e1;overflow-wrap:break-word;';
     statusEl.textContent = 'Ready';
 
     box.appendChild(row);
+    box.appendChild(alertEl);
     box.appendChild(statusEl);
     document.body.appendChild(box);
+    renderOverlayAlert(window.__slContactAlert || null);
   }
 
   // ---------------- In-page fallback hotkeys (F8/F9) ----------------

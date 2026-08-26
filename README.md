@@ -13,7 +13,7 @@ That's it. Dial, no answer, red, green, repeat.
 
 And before you dial, it checks the contact's page for you — if Salesloft already
 has them tagged **Meeting Scheduled**, **Interested**, or **No Interest**, a
-colour-coded toast says so.
+colour-coded alert says so, right next to the buttons.
 
 ---
 
@@ -83,8 +83,9 @@ The status line under the buttons (it says "Ready" in the picture above) tells y
 
 Nothing kills a call faster than dialing someone who already told your teammate
 "not interested" — or who already has a meeting on the books. So the extension
-reads the Disposition and Sentiment tags already on the contact's page and pops a
-toast at the top of the screen before you dial.
+reads the Disposition and Sentiment tags already on the contact's page and shows
+a colour-coded alert before you dial — in the floating panel, and as a small
+line inside the on-page buttons. Nothing pops up over the Salesloft page itself.
 
 It reads the tags off the activity feed — the pills on a logged call or a booked
 meeting — as well as any labelled Disposition/Sentiment field. Each tag keeps its
@@ -97,14 +98,13 @@ own colour, so you can read the situation at a glance:
 | **No Interest** | 🔴 Red | They've said no. Check before you dial again. |
 
 If more than one tag is on the page, every tag still shows in its own colour, and
-the toast itself takes the colour of the most important one — blue first, then
+the alert itself takes the colour of the most important one — blue first, then
 red, then green.
 
-The toast follows whoever is on screen: it updates when you move to the next
-person in the cadence and disappears when their page is clean. Click the **✕** to
-wave it off for that contact; it comes back for the next one. If the floating
-panel is open, the same alert shows there too, so you see it without leaving the
-tab you're in.
+The alert follows whoever is on screen: it updates when you move to the next
+person in the cadence and disappears when their page is clean. The floating
+panel and the on-page buttons show the same alert, so you see it whichever one
+you work from — including from another tab.
 
 > [!NOTE]
 > This reads the page — it doesn't change anything and it never logs a call for
