@@ -2,15 +2,15 @@
 // Responsibilities:
 //  1. Relay keyboard commands (Ctrl+Shift+9/0) to the Salesloft tab from anywhere.
 //  2. Open/close the floating control panel window based on the setting.
-//  3. Broadcast status updates from the content script to the panel.
+//  3. Broadcast status updates and contact alerts from the content script to
+//     the panel.
 
-const PANEL = { url: 'panel.html', width: 280, height: 170 };
+importScripts('defaults.js');
 
-// ---- Settings defaults ----
-const DEFAULTS = { floatingPanel: false, pageOverlay: true, disposition: 'No Answer' };
+const PANEL = { url: 'panel.html', width: 280, height: 260 };
 
 async function getSettings() {
-  return chrome.storage.sync.get(DEFAULTS);
+  return chrome.storage.sync.get(self.SL_DEFAULTS);
 }
 
 // ---- Panel window management (id kept in session storage; survives worker sleep) ----
@@ -76,7 +76,10 @@ async function sendToSalesloft(action) {
   } catch (e) {
     // Content script missing (tab predates install) — inject and retry once.
     try {
-      await chrome.scripting.executeScript({ target: { tabId: target.id }, files: ['content.js'] });
+      await chrome.scripting.executeScript({
+        target: { tabId: target.id },
+        files: ['defaults.js', 'content.js', 'alerts.js'],
+      });
       await chrome.tabs.sendMessage(target.id, { type: 'dialer-action', action });
     } catch (e2) {
       broadcastStatus('Could not reach Salesloft tab — refresh it once', 'err');
@@ -94,7 +97,7 @@ chrome.commands.onCommand.addListener((command) => {
   if (command === 'kill-and-log' || command === 'start-call') sendToSalesloft(command);
 });
 
-// Messages from the panel and settings pages.
+// Messages from the content script, the panel, and the settings page.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'dialer-action') sendToSalesloft(msg.action);
   if (msg.type === 'status') broadcastStatus(msg.msg, msg.kind); // forward content → panel

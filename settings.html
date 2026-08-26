@@ -21,7 +21,7 @@
       padding: 8px 0;
       border-bottom: 1px solid #2c2f34;
     }
-    .setting:last-of-type { border-bottom: none; }
+    .setting:has(+ .footer) { border-bottom: none; }
     .name { flex: 1; }
     .hint { display: block; opacity: .55; font-size: 11px; margin-top: 2px; }
 
@@ -42,6 +42,22 @@
     input[type="text"] {
       width: 110px; padding: 5px 8px; border: 1px solid #3a3d42;
       border-radius: 6px; background: #26282c; color: #e8e6e1; font-size: 12px;
+    }
+    .stacked { display: block; padding: 8px 0; border-bottom: 1px solid #2c2f34; }
+    .stacked textarea {
+      width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical;
+      min-height: 46px; padding: 5px 8px; border: 1px solid #3a3d42;
+      border-radius: 6px; background: #26282c; color: #e8e6e1;
+      font-family: inherit; font-size: 12px;
+    }
+    .section {
+      margin: 14px 0 2px; font-size: 11px; text-transform: uppercase;
+      letter-spacing: .06em; opacity: .5;
+    }
+    .swatches { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
+    .swatch {
+      padding: 2px 8px; border-radius: 999px; border: 1px solid;
+      font-size: 11px; font-weight: 600; white-space: nowrap;
     }
     .footer { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; }
     .footer button {
@@ -85,11 +101,45 @@
     <input type="text" id="disposition" />
   </div>
 
+  <div class="section">Contact alerts</div>
+
+  <div class="setting">
+    <div class="name">
+      Alert on tags
+      <span class="hint">Toast on the page before you dial</span>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="alertsEnabled" />
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="stacked">
+    <div class="name">
+      Tags to watch
+      <span class="hint">Comma separated, matched exactly</span>
+    </div>
+    <textarea id="alertTags" rows="2"></textarea>
+    <div class="swatches" id="swatches"></div>
+  </div>
+
+  <div class="setting">
+    <div class="name">
+      Only labelled fields
+      <span class="hint">Ignore tags not next to Disposition/Sentiment</span>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="alertStrict" />
+      <span class="slider"></span>
+    </label>
+  </div>
+
   <div class="footer">
     <button id="shortcuts">Edit shortcuts</button>
     <span id="saved">Saved ✓</span>
   </div>
 
+  <script src="defaults.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

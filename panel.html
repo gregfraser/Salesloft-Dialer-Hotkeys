@@ -31,7 +31,18 @@
     #call { background: #1e7e46; }
     #status { min-height: 16px; margin-top: 8px; color: #e8e6e1; }
     #status.ok { color: #a8e6b8; }
+    #status.warn { color: #ffd88a; }
     #status.err { color: #ffb4a8; }
+
+    /* Contact alert — colour set inline from the shared palette. */
+    #alert { display: none; margin-top: 8px; padding: 8px 9px; border-radius: 8px; border: 1px solid; }
+    #alert.show { display: block; }
+    #alert .who { font-weight: 600; margin-bottom: 5px; }
+    #alert .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+    #alert .tag {
+      padding: 2px 8px; border-radius: 999px; border: 1px solid;
+      font-size: 11px; font-weight: 600; white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -46,6 +57,8 @@
     </button>
   </div>
   <div id="status">Ready — shortcuts work from anywhere</div>
+  <div id="alert"></div>
+  <script src="defaults.js"></script>
   <script src="panel.js"></script>
 </body>
 </html>
