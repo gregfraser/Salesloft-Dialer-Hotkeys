@@ -183,9 +183,8 @@
       txView.paused = !!msg.paused;
       renderPaused();
     }
-    // The call ended with lines nothing has saved, because the floating panel
-    // (which would have) is closed. Offer it in the status line; never grab a
-    // download the rep did not ask for.
+    // The call ended with lines nobody has saved. Offer it in the status line;
+    // never grab a download the rep did not ask for.
     if (msg.type === 'transcript-unsaved') offerSave();
 
     sendResponse({ ok: true });
@@ -583,11 +582,12 @@
 
   // Text only, never audio. Returns false when there is nothing to write.
   //
-  // Only ever called from the ↓ button. Chrome allows a page one download
-  // without a click and then asks the user's permission for the rest, so an
-  // automatic save from here would put a prompt on the Salesloft page partway
-  // through a call block. The floating panel is an extension page and is under
-  // no such limit, which is why it — not this — does the saving on its own.
+  // Only ever called from the ↓ button, and that is the rule everywhere: no
+  // call saves a transcript on its own. Two reasons, and either alone settles
+  // it — a cadence is dozens of dials, so a file per dial buries the few worth
+  // keeping; and Chrome allows a web page one uninvited download before it
+  // starts asking the rep's permission for the rest, which would put a
+  // permission bubble on the Salesloft page partway through a call block.
   function saveTranscript() {
     if (!txView.entries.length) return false;
     const blob = new Blob([window.slTranscriptText(txView.entries)], { type: 'text/plain' });

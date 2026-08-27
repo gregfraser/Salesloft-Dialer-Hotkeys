@@ -142,17 +142,14 @@ function reportTranscription(state, detail) {
   forwardToSalesloft(message);
 }
 
-// Both surfaces hold the same lines, so exactly one is asked to deal with them.
-// The floating panel saves on its own — it is an extension page, under no limit
-// on how many files it may write. The on-page transcript is part of a web page,
-// which Chrome allows one uninvited download before it starts asking the rep's
-// permission, so it is told to offer the save instead of taking it.
-async function requestTranscriptSave() {
-  if ((await getPanelId()) !== null) {
-    chrome.runtime.sendMessage({ type: 'save-transcript' }).catch(() => {});
-  } else {
-    await forwardToSalesloft({ type: 'transcript-unsaved' });
-  }
+// Nothing downloads a transcript on its own. A call block is dozens of dials,
+// and a file per dial buries the handful worth keeping in a heap of no-answers
+// nobody asked for. Both surfaces are told the call left unsaved lines and each
+// offers the save; the rep decides which calls are worth a file.
+async function offerTranscriptSave() {
+  const message = { type: 'transcript-unsaved' };
+  chrome.runtime.sendMessage(message).catch(() => {});
+  await forwardToSalesloft(message);
 }
 
 // ---- Capture arming -------------------------------------------------------
@@ -263,10 +260,10 @@ async function stopTranscription(detail) {
   sendToOffscreen({ type: 'stop-capture' });
   // Give the server a moment to flush the queue before the document goes away.
   setTimeout(async () => {
-    // Save first, and unconditionally: the flush above is what makes the last
-    // utterance of the call part of the file, and a back-to-back dial must not
-    // carry the previous call's lines away with it.
-    await requestTranscriptSave();
+    // Offer first, and unconditionally: the flush above is what makes the
+    // call's last utterance part of anything the rep goes on to save, and a
+    // back-to-back dial must not carry the previous call's lines away first.
+    await offerTranscriptSave();
     // A new call can start inside this window (back-to-back dials are the
     // whole point of a cadence). If one did, leave its capture alone.
     if (transcriptionState !== STATE.FINALIZING) return;

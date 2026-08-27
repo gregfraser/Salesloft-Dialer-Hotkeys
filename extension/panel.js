@@ -27,7 +27,7 @@ const view = {
   paused: false,
   callStart: null,
   timerHandle: null,
-  unsaved: false, // lines added since the last save — drives the call-end auto-save
+  unsaved: false, // lines added since the last save — drives the call-end offer
 };
 
 // ------------------------------------------------------------ dialer actions
@@ -174,6 +174,7 @@ function saveTranscript() {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   view.unsaved = false;
+  clearSaveOffer();
   setStatus('Transcript saved', 'ok');
 }
 
@@ -182,8 +183,22 @@ els.save.addEventListener('click', () => {
   saveTranscript();
 });
 
+// Quiet, and quiet is the point: a line in the status the rep already reads,
+// plus a highlight on the button that acts on it. No modal, no focus steal.
+function offerSave() {
+  if (!view.unsaved || !view.entries.length) return;
+  setStatus(`Transcript ready (${view.entries.length} lines) — ↓ to save`, 'warn');
+  els.save.classList.add('nudge');
+}
+
+function clearSaveOffer() {
+  els.save.classList.remove('nudge');
+}
+
 els.clear.addEventListener('click', () => {
   view.entries = [];
+  view.unsaved = false;
+  clearSaveOffer();
   els.transcript.innerHTML = '<div id="empty">Cleared.</div>';
   view.autoScroll = true;
   els.scrollHint.classList.remove('on');
@@ -249,13 +264,11 @@ chrome.runtime.onMessage.addListener((msg) => {
     els.pause.title = view.paused ? 'Resume transcription' : 'Pause transcription';
   }
 
-  // Transcription on means the transcript is always kept. The worker asks one
-  // surface to save — this panel when it is open, the on-page transcript
-  // otherwise — once the server has flushed the call's last utterance. Saving
-  // here rather than on call-end is what keeps that last line in the file.
-  if (msg.type === 'save-transcript') {
-    if (view.unsaved && view.entries.length) saveTranscript();
-  }
+  // The call ended with lines nobody has saved. Nothing downloads on its own —
+  // a cadence is dozens of dials and almost none of them are worth a file — so
+  // this only points at the button. The worker sends it once the server has
+  // flushed, so what the rep saves includes the call's last utterance.
+  if (msg.type === 'transcript-unsaved') offerSave();
 
   if (msg.type === 'call-state') {
     if (msg.state === 'IN_CALL') {

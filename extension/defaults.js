@@ -15,8 +15,9 @@
 
     // -- transcription --
     // The master switch is the only choice: with it on, transcription always
-    // starts when a call is detected and the transcript (text only, never
-    // audio) is always saved when the call ends.
+    // starts when a call is detected. Saving is never automatic — a cadence is
+    // dozens of dials and a file per dial is noise — so the transcript (text
+    // only, never audio) is written only when the rep asks for it.
     transcription: false,          // master switch, off until opted into
     // Empty means the system default output device. See docs/troubleshooting.md:
     // if the rep's headset is not the Windows default, passthrough plays the
