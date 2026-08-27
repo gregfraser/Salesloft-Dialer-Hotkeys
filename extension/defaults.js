@@ -118,6 +118,42 @@
     return out;
   };
 
+  // ---------------- Which pages the on-page controls belong on ----------------
+  // The buttons dial one person, so they only make sense where one person is on
+  // screen: a contact's own page, not the dashboard, a cadence, the People list
+  // or analytics. Salesloft is a single-page app, so the content script is
+  // injected once and this is re-checked on every navigation instead.
+  //
+  // Matched on the route rather than the DOM. A contact's page is
+  // /app/people/{id} — older builds nest it as /app/people/details/{id} — while
+  // the list itself is /app/people with nothing after it. So: a section that
+  // names people, followed by something that looks like one record.
+  const CONTACT_SECTIONS = ['people', 'person', 'contact', 'contacts', 'prospect', 'prospects'];
+
+  // Segments that follow the section but are still a listing rather than a
+  // record. Without these, /app/people/search would read as a contact.
+  const NOT_A_RECORD = [
+    'list', 'lists', 'search', 'filter', 'filters', 'import', 'imports',
+    'all', 'new', 'bulk', 'tags', 'segments',
+  ];
+
+  root.slIsContactUrl = function (url) {
+    let parsed;
+    try {
+      parsed = new URL(String(url == null ? '' : url), 'https://app.salesloft.com');
+    } catch (e) {
+      return false;
+    }
+    // Some Salesloft routes live in the fragment (#/people/123); treat that as
+    // part of the path so both styles resolve the same way.
+    const hash = parsed.hash.startsWith('#/') ? parsed.hash.slice(1) : '';
+    const parts = (parsed.pathname + hash).split('/').filter(Boolean).map((p) => p.toLowerCase());
+
+    const section = parts.findIndex((p) => CONTACT_SECTIONS.indexOf(p) !== -1);
+    if (section < 0) return false;
+    return parts.slice(section + 1).some((p) => NOT_A_RECORD.indexOf(p) === -1);
+  };
+
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       DEFAULTS,
@@ -125,6 +161,7 @@
       slTranscriptText: root.slTranscriptText,
       slTranscriptFilename: root.slTranscriptFilename,
       slParseTags: root.slParseTags,
+      slIsContactUrl: root.slIsContactUrl,
       slColorFor: root.slColorFor,
       slTopColor: root.slTopColor,
     };

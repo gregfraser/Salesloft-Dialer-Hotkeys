@@ -41,8 +41,12 @@ setup checks for this and refuses to finish if it happens.
 
 ## The dialer
 
-**No buttons on the Salesloft page.** Refresh the tab. If they still do not
-appear, check that **Buttons on Salesloft page** is on in settings.
+**No buttons on the Salesloft page.** They are drawn only where there is a
+contact to dial -- a person's page, or any page with the call logger open -- and
+never on the dashboard, a cadence or the People list. On a person's page:
+refresh the tab, then check that **Buttons on Salesloft page** is on in
+settings. If a route that clearly is a contact's page shows nothing, Salesloft
+has changed it; `slIsContactUrl()` in `extension/defaults.js` is what decides.
 
 **Pressed the shortcut and nothing happened.** Make sure a Salesloft tab is open
 in Chrome, then refresh it once.

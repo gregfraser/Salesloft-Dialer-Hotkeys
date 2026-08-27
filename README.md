@@ -55,7 +55,9 @@ Click the Extensions button (the puzzle-piece icon 🧩) to the right of Chrome'
 
 ### Step 6 — Refresh Salesloft
 
-If you already had Salesloft open, refresh that tab once. You should see the red and green buttons (pictured above) appear in the bottom-left corner of the page. You're done! 🎉
+If you already had Salesloft open, refresh that tab once. Open any person's page and you should see the red and green buttons (pictured above) appear in the bottom-left corner. You're done! 🎉
+
+> The buttons only show up where there's someone to dial — a contact's page, or any page with the call window open. You won't see them on your dashboard, a cadence, or the People list.
 
 ---
 
@@ -120,7 +122,7 @@ Click the extension's icon in your toolbar to open settings:
 | Setting | What it does |
 |---|---|
 | **Floating panel** | Puts the buttons in their own little window that you can drag anywhere — even a second monitor. It stays open while you work in other tabs. |
-| **Buttons on Salesloft page** | Shows or hides the buttons in the corner of the Salesloft page. Turn off if you're using the floating panel or just the keyboard. |
+| **Buttons on Salesloft page** | Shows or hides the buttons in the corner of a contact's page. Turn off if you're using the floating panel or just the keyboard. |
 | **Disposition** | The label the red button logs. Set to "No Answer." Only change this if your team's dropdown uses different wording — it must match the dropdown option in Salesloft **exactly**, including capitalization. |
 | **Alert on tags** | Turns the contact alerts on or off. |
 | **Tags to watch** | Which tags trigger an alert, comma separated. Starts with No Interest, Meeting Scheduled, Interested. Each one must match Salesloft's wording exactly. The coloured pills underneath show you what each tag will look like. |
@@ -247,7 +249,7 @@ node --test tests/test_transcript_format.js    # shared transcript formatting
 <details>
 <summary><strong>No buttons on the Salesloft page?</strong></summary>
 
-Refresh the Salesloft tab. If they still don't appear, check that **Buttons on Salesloft page** is turned on in settings (click the extension icon).
+Check you're on a person's page — the buttons stay out of the way everywhere else (your dashboard, a cadence, the People list). If you are on one, refresh the Salesloft tab, then check that **Buttons on Salesloft page** is turned on in settings (click the extension icon).
 </details>
 
 <details>

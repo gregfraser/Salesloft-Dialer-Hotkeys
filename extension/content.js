@@ -9,10 +9,15 @@
 
   // ---------------- Settings (live-synced) ----------------
   const settings = Object.assign({}, window.SL_DEFAULTS);
+  // Nothing is drawn until storage has answered: the page re-renders within
+  // milliseconds of injection, and a rep who turned the overlay off should not
+  // see it flash up first.
+  let settingsReady = false;
 
   chrome.storage.sync.get(settings, (stored) => {
     Object.assign(settings, stored);
-    if (settings.pageOverlay) buildOverlay();
+    settingsReady = true;
+    syncOverlay();
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -20,13 +25,13 @@
     if (changes.disposition) settings.disposition = changes.disposition.newValue;
     if (changes.pageOverlay) {
       settings.pageOverlay = changes.pageOverlay.newValue;
-      settings.pageOverlay ? buildOverlay() : removeOverlay();
+      syncOverlay();
     }
     // Turning transcription on or off adds or removes the transcript pane, so
     // the overlay is rebuilt. Lines already on screen are carried across.
     if (changes.transcription) {
       settings.transcription = changes.transcription.newValue;
-      if (settings.pageOverlay) buildOverlay();
+      syncOverlay(true);
     }
   });
 
@@ -209,6 +214,7 @@
   const TRANSCRIPT_HEIGHT = 152;
 
   let alertEl;
+  let overlayEl = null; // the box this copy of the script built, if any
   let tx = null; // transcript DOM refs, or null when the pane is not shown
 
   // Transcript state outlives the DOM: rebuilding the overlay (a settings
@@ -228,8 +234,45 @@
   // so a whole day of dialing cannot pile up DOM on the Salesloft page.
   const MAX_RENDERED_LINES = 400;
 
+  // A contact can be on screen without the route saying so: the call logger
+  // pops out over whatever page the rep dialled from, and it is always about one
+  // person. Losing the buttons there would take them away exactly when a call is
+  // running, so the DOM gets the last word after the route.
+  const CONTACT_DOM = '[data-testid="popout-logger-container"],[data-testid*="person-detail" i]';
+
+  function onContactPage() {
+    if (window.slIsContactUrl && window.slIsContactUrl(location.href)) return true;
+    try {
+      return !!document.querySelector(CONTACT_DOM);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // The single place that decides whether the overlay is on screen. Salesloft is
+  // a single-page app — this script is injected once and then sees every
+  // navigation as a re-render — so it is called again on each of those, not just
+  // when a setting changes. Pass `rebuild` when the overlay's contents changed
+  // (the transcript pane appearing) rather than its presence.
+  function syncOverlay(rebuild) {
+    if (!settingsReady) return;
+    const present = document.getElementById(OVERLAY_ID);
+    if (settings.pageOverlay && onContactPage()) {
+      // An overlay that is on the page but not the one this script built was
+      // left behind by a previous copy whose context a reload invalidated. Its
+      // buttons are wired to that dead context, so it counts as missing.
+      const mine = !!present && present === overlayEl;
+      if (!mine || rebuild) buildOverlay();
+      return;
+    }
+    // Never pull the controls, or the status line reporting on them, out from
+    // under a flow that is part-way through logging a call.
+    if (present && !busy) removeOverlay();
+  }
+
   function removeOverlay() {
     document.getElementById(OVERLAY_ID)?.remove();
+    overlayEl = null;
     statusEl = null;
     alertEl = null;
     tx = null;
@@ -338,6 +381,7 @@
     if (settings.transcription) box.appendChild(buildTranscript());
 
     document.body.appendChild(box);
+    overlayEl = box;
     renderOverlayAlert(window.__slContactAlert || null);
     // scrollHeight is 0 until the box is in the document, so carried-over lines
     // can only be scrolled into view once it is.
@@ -706,8 +750,18 @@
     // Salesloft's React tree mutates constantly; debounce so this costs
     // nothing measurable during a call.
     clearTimeout(detectTimer);
-    detectTimer = setTimeout(reportCallState, 250);
+    detectTimer = setTimeout(() => {
+      reportCallState();
+      // Every in-app navigation re-renders, so this is also where the overlay
+      // learns it has moved off (or onto) a contact.
+      syncOverlay();
+    }, 250);
   }
+
+  // A route change with no re-render worth noticing is unlikely, but these cost
+  // nothing and keep the overlay honest if one happens.
+  window.addEventListener('popstate', () => scheduleDetect());
+  window.addEventListener('hashchange', () => scheduleDetect());
 
   if (typeof MutationObserver === 'function') {
     // Ignore our own overlay, which churns with every transcript line once a
