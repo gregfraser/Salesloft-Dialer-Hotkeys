@@ -1,5 +1,44 @@
 # Troubleshooting
 
+## Setup
+
+**"pip.exe is not recognized" while installing.** A previous setup run was
+interrupted part-way through pip upgrading itself. On Windows pip cannot
+overwrite the files it is running from, so it renames its own package to `~ip`,
+unpacks the new copy, and regenerates `Scripts\pip.exe` last. Stop it in the
+middle and you are left with a working `python -m pip` and no `pip.exe`. The
+giveaway is a `WARNING: Ignoring invalid distribution ~ip` line -- any
+`~`-prefixed folder in `.venv\Lib\site-packages` is a tombstone from an
+interrupted install.
+
+Recover with:
+
+```powershell
+Remove-Item -Recurse -Force .venv\Lib\site-packages\~*
+.venv\Scripts\python.exe -m pip install --force-reinstall --no-cache-dir pip
+```
+
+Then double-click **Install.cmd** again. Deleting the whole `.venv` folder and
+re-running setup also works and takes about the same time.
+
+**Setup says Python is too old, or typing `python` opens the Microsoft Store.**
+The Store alias is a stub named `python.exe` that opens the Store and exits
+without running anything. Turn it off in Settings > Apps > Advanced app settings
+> App execution aliases -- switch off both python entries -- then install Python
+3.10 or newer from python.org and run setup again.
+
+**Setup stops on "CPU-only PyTorch install failed".** Usually a network blip
+against `download.pytorch.org`. Just run it again. Setup stops rather than
+carrying on because the next step would satisfy the same dependency from
+ordinary PyPI, which quietly installs about 2.5GB of CUDA libraries this
+service never uses.
+
+**`.venv` is several gigabytes.** A CUDA build of PyTorch got installed at some
+point. Delete the `.venv` folder and double-click **Install.cmd** again; current
+setup checks for this and refuses to finish if it happens.
+
+---
+
 ## The dialer
 
 **No buttons on the Salesloft page.** Refresh the tab. If they still do not

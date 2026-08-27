@@ -140,25 +140,43 @@ anywhere.
 
 ### One-time setup
 
-You need Python 3.10 or newer installed. Then, from the folder you downloaded:
+You need Python 3.10 or newer installed ([python.org](https://www.python.org/downloads/) —
+tick **Add python.exe to PATH** on the first screen of the installer).
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1
-```
+Then open the folder you downloaded and **double-click `Install.cmd`**. It takes
+a few minutes, mostly downloading the speech model so your first call isn't
+spent waiting. When it says "Setup complete", close the window.
 
-That takes a few minutes — it downloads the speech model so your first call
-isn't spent waiting.
+If anything goes wrong it stops and tells you what happened — the **Setup**
+section of [docs/troubleshooting.md](docs/troubleshooting.md) covers the common
+ones.
 
 ### Each day
 
-Start the server before your call block and leave the window open:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\start-server.ps1
-```
+**Double-click `Start Server.cmd`** before your call block and leave that window
+open. Closing it turns transcription off.
 
 Then turn on **Live transcription** in the extension settings. Click
 **Test server** to confirm the two are talking to each other.
+
+> [!TIP]
+> Tired of remembering? **Double-click `Auto-start.cmd`** and the server starts
+> by itself, minimised, every time you log in. Double-click it again to switch
+> that back off. The catch: the server keeps the speech model loaded — about a
+> gigabyte of memory — from login until you close it. That's what makes the
+> first call of the day as fast as the rest.
+
+<details>
+<summary>Prefer the command line?</summary>
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+powershell -ExecutionPolicy Bypass -File scripts\start-server.ps1
+powershell -ExecutionPolicy Bypass -File scripts\autostart.ps1 -Enable
+```
+
+The `.cmd` files do exactly this and nothing more.
+</details>
 
 ### Starting it on a call
 

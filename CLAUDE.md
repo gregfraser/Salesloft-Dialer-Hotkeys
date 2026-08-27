@@ -41,9 +41,35 @@ Running the service:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1       # one-time
 powershell -ExecutionPolicy Bypass -File scripts\start-server.ps1  # each session
+powershell -ExecutionPolicy Bypass -File scripts\autostart.ps1 -Toggle
 python scripts/replay_wav.py sample.wav                            # exercise it without Chrome
 python scripts/benchmark.py --models base.en,small.en sample.wav   # Phase 0 gate
 ```
+
+The three `.cmd` files in the repo root (`Install.cmd`, `Start Server.cmd`,
+`Auto-start.cmd`) are double-click wrappers around the first three and nothing
+else — the audience is a rep who should never have to type
+`-ExecutionPolicy Bypass`. Keep them that way: no logic in the batch files
+beyond `pushd`, the call, and reporting the exit code. They are stored with CRLF
+and pinned by `.gitattributes` (`*.cmd -text`), because `cmd.exe` mis-parses a
+multi-line `if()` block in a file with bare LF endings.
+
+**`install.ps1` checks `$LASTEXITCODE` after every native call, and must keep
+doing so.** This is Windows PowerShell 5.1, where `$ErrorActionPreference` only
+governs PowerShell's own errors — a `python.exe` or `pip.exe` that exits nonzero
+raises nothing, so an unchecked failure falls through and the script still ends
+with "Setup complete." in green. (PowerShell 7.3+ has
+`$PSNativeCommandUseErrorActionPreference`; 5.1 has no equivalent.) The step
+that matters most is the CPU-only torch install: `requirements.txt` lists
+`torch>=2.0`, so if that step fails and the script continues, the next one
+satisfies torch from ordinary PyPI and silently installs ~2.5GB of CUDA
+libraries. A `torch.version.cuda is None` assertion after the install catches
+it arriving by any other route.
+
+Invoke pip as `& $venvPython -m pip`, never `Scripts\pip.exe`. That `.exe` is a
+generated console-script shim, and pip's self-upgrade on Windows renames its own
+package to `~ip` and regenerates the shim last — interrupt it and `pip.exe` is
+gone while `python -m pip` still works.
 
 ## Verifying extension changes
 

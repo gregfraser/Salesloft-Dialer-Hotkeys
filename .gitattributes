@@ -1,0 +1,5 @@
+# Windows-only launchers. cmd.exe mis-parses multi-line if() blocks when the
+# file has bare LF endings, so these are stored with CRLF and kept exactly as
+# committed -- no normalisation on checkout, and none in the GitHub ZIP the
+# README tells people to download.
+*.cmd -text
