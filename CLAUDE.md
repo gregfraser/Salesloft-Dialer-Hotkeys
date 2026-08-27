@@ -50,7 +50,7 @@ Manual, against the live Salesloft app:
 
 1. `chrome://extensions` → Developer mode → **Load unpacked** → select `extension/`.
 2. After editing `background.js`, `manifest.json`, `defaults.js` or `call-detect.js`: reload the extension card.
-3. After editing `content.js`: reload the extension **and** refresh the `app.salesloft.com` tab.
+3. After editing `content.js` or `alerts.js`: reload the extension **and** refresh the `app.salesloft.com` tab.
 4. After editing `offscreen.js` or `pcm-worklet.js`: reload the extension and restart capture (`Ctrl+Shift+8` twice) — the offscreen document is only recreated on the next capture.
 5. After editing `panel.*` or `settings.*`: close and reopen that window/popup.
 
@@ -60,6 +60,7 @@ Four execution contexts in Chrome plus one Python process. Understanding any fea
 
 - **`background.js`** (service worker) — the relay and the owner of transcription state (`IDLE → STARTING → TRANSCRIBING → FINALIZING`, plus first-class `DEGRADED`). Finds the most-recently-accessed Salesloft tab, forwards dialer actions, and on failure injects the content scripts via `chrome.scripting` and retries once. Owns the panel window (id in `chrome.storage.session`, so it survives worker sleep), the offscreen document lifecycle, and capture arming.
 - **`content.js`** — runs only on `https://app.salesloft.com/*`; performs the DOM automation, renders the optional overlay, handles in-page F8/F9. Guards double-injection with `window.__slHotkeysLoaded`.
+- **Orphaned content scripts are a normal state.** Reloading or updating the extension leaves the old content scripts running in the page with `chrome.runtime` gone — accessing it throws. Every `chrome.*` send from a content script goes through a guard (`safeSend()` in `content.js`, try/catch in `alerts.js`) so the DOM flows still complete from a stale script, and `buildOverlay()` always **replaces** an existing overlay rather than keeping it, because a leftover one is wired to the dead context. Preserve both patterns in new content-script code.
 - **`call-detect.js`** — call-state detection, **observe only**. Takes its DOM access as injected functions (`elements`, `isVisible`) so it is testable without a DOM.
 - **`alerts.js`** — reads the Disposition / Sentiment tags already on the contact's page, **read only**. It renders nothing of its own: the colour-coded alert shows in the floating panel (via a `contact-alert` message) and as a subtle line inside the on-page overlay (via the `window.__slOnContactAlert` hook `content.js` registers in their shared isolated world). `content.js` also reads `window.__slContactAlert` for its status line.
 - **`offscreen.js`** + **`pcm-worklet.js`** — hidden document holding the `AudioContext`, the mandatory passthrough, the downsampler and the WebSocket. MV3 service workers terminate after ~30s and cannot hold `MediaStream`s, which is why this exists.
@@ -68,7 +69,7 @@ Four execution contexts in Chrome plus one Python process. Understanding any fea
 
 ### Settings
 
-`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `disposition`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `outputDeviceId`, `serverUrl`, `healthUrl`). With `transcription` on, auto-start and transcript saving are unconditional — they are behaviours, not settings.
+`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `disposition`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `outputDeviceId`, `serverUrl`, `healthUrl`). With `transcription` on, auto-start and transcript saving are unconditional — they are behaviours, not settings. The auto-save lives in `panel.js` (on the call-end `call-state` message, deduplicated by a dirty flag): the panel is the only thing that accumulates transcript lines, so transcripts are only saved while the floating panel is open.
 
 **`extension/defaults.js` is the single definition** — loaded as a plain script by the content script (via the manifest), the service worker (`importScripts`), and both HTML pages (`<script>` before their own). Add new settings there only; do not reintroduce per-file copies.
 
@@ -108,6 +109,8 @@ When Salesloft ships UI changes, these are what break.
 - `killAndLog` sets the disposition **before** clicking "Log & Complete". Any failed step throws, surfaces "Stopped: … Finish manually.", and leaves the call unlogged — never log with a wrong or missing disposition.
 - A `busy` flag serializes flows; hotkeys and clicks are ignored while one runs.
 - In-page hotkeys are suppressed while typing (`isTyping()`).
+- **The overlay never moves or resizes.** It is pinned bottom-left at a fixed width; status and alert text wrap inside it. Anything that would make it grow with its content re-introduces the jumping the fixed width exists to stop.
+- **Nothing renders over the Salesloft page.** The contact alert appears only in the floating panel and as the tinted line inside the overlay (`window.__slOnContactAlert`); do not bring back a floating toast.
 
 **Transcription**
 
