@@ -120,14 +120,39 @@ async function sendToSalesloft(action) {
   }
 }
 
+// Push a message into the Salesloft page. Extension pages (the panel) receive
+// chrome.runtime broadcasts; content scripts do not, so anything the on-page
+// transcript needs has to be relayed here. This is a different channel from the
+// broadcast, so it cannot double up a line the panel already rendered.
+async function forwardToSalesloft(message) {
+  const target = await findSalesloftTab();
+  if (!target) return;
+  try {
+    await chrome.tabs.sendMessage(target.id, message);
+  } catch (e) { /* no content script in that tab yet — the panel still has it */ }
+}
+
 function broadcastStatus(msg, kind) {
   chrome.runtime.sendMessage({ type: 'status', msg, kind }).catch(() => {});
 }
 
 function reportTranscription(state, detail) {
-  chrome.runtime
-    .sendMessage({ type: 'transcription-status', state, detail: detail || '' })
-    .catch(() => {});
+  const message = { type: 'transcription-status', state, detail: detail || '' };
+  chrome.runtime.sendMessage(message).catch(() => {});
+  forwardToSalesloft(message);
+}
+
+// Both surfaces hold the same lines, so exactly one is asked to deal with them.
+// The floating panel saves on its own — it is an extension page, under no limit
+// on how many files it may write. The on-page transcript is part of a web page,
+// which Chrome allows one uninvited download before it starts asking the rep's
+// permission, so it is told to offer the save instead of taking it.
+async function requestTranscriptSave() {
+  if ((await getPanelId()) !== null) {
+    chrome.runtime.sendMessage({ type: 'save-transcript' }).catch(() => {});
+  } else {
+    await forwardToSalesloft({ type: 'transcript-unsaved' });
+  }
 }
 
 // ---- Capture arming -------------------------------------------------------
@@ -238,6 +263,10 @@ async function stopTranscription(detail) {
   sendToOffscreen({ type: 'stop-capture' });
   // Give the server a moment to flush the queue before the document goes away.
   setTimeout(async () => {
+    // Save first, and unconditionally: the flush above is what makes the last
+    // utterance of the call part of the file, and a back-to-back dial must not
+    // carry the previous call's lines away with it.
+    await requestTranscriptSave();
     // A new call can start inside this window (back-to-back dials are the
     // whole point of a cadence). If one did, leave its capture alone.
     if (transcriptionState !== STATE.FINALIZING) return;
@@ -319,17 +348,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'transcription-command') {
     if (msg.action === 'start') startTranscription();
     if (msg.action === 'stop') stopTranscription('Transcription stopped');
-    if (msg.action === 'pause') sendToOffscreen({ type: 'set-paused', paused: !!msg.paused });
+    if (msg.action === 'pause') {
+      sendToOffscreen({ type: 'set-paused', paused: !!msg.paused });
+      // Pause is one state shared by two UIs. Echo it so whichever one the rep
+      // did not click still shows what the capture is actually doing.
+      const echo = { type: 'transcription-paused', paused: !!msg.paused };
+      chrome.runtime.sendMessage(echo).catch(() => {});
+      forwardToSalesloft(echo);
+    }
   }
 
   // Status from the offscreen document. The panel receives these directly, so
   // they are observed here rather than re-broadcast (which would double lines).
+  // The on-page transcript is a content script and gets none of them, so those
+  // two go on to the tab.
   if (msg.type === 'transcription-status' && !msg.target) {
     if (msg.state === 'degraded' && transcriptionState === STATE.TRANSCRIBING) {
       setTranscriptionState(STATE.DEGRADED);
     } else if (msg.state === 'ready' && transcriptionState === STATE.DEGRADED) {
       setTranscriptionState(STATE.TRANSCRIBING);
     }
+    forwardToSalesloft(msg);
+  }
+
+  if (msg.type === 'transcript' && !msg.target && msg.payload) {
+    forwardToSalesloft(msg);
   }
 
   sendResponse({ ok: true });

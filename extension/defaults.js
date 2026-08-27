@@ -73,6 +73,35 @@
     amber: 'Heads up before you dial',
   };
 
+  // ---------------- Transcript formatting ----------------
+  // Shared by the floating panel and the on-page transcript pane so a line
+  // reads the same in both, and a saved file does not depend on which one
+  // happened to write it.
+  root.slFormatClock = function (seconds) {
+    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+    const minutes = String(Math.floor(total / 60)).padStart(2, '0');
+    return `${minutes}:${String(total % 60).padStart(2, '0')}`;
+  };
+
+  // A running transcript can span several calls. `newCall` on an entry marks
+  // where the next one began, so the text keeps the boundary the on-screen
+  // divider shows. Entries without it (the floating panel's) format unchanged.
+  root.slTranscriptText = function (entries) {
+    const lines = [];
+    for (const entry of entries || []) {
+      if (entry.newCall && lines.length) lines.push('', '--- next call ---', '');
+      lines.push(`[${root.slFormatClock(entry.start)}] ${entry.text}`);
+    }
+    return lines.join('\n');
+  };
+
+  // transcript_2026-08-27T14-32-05.txt — a timestamp and nothing else. The
+  // filename never carries the prospect's name.
+  root.slTranscriptFilename = function (now) {
+    const stamp = (now || new Date()).toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    return `transcript_${stamp}.txt`;
+  };
+
   // "No Interest, Meeting Scheduled" -> ['No Interest', 'Meeting Scheduled'].
   // Accepts an array too, so it can also sanitise whatever is in storage.
   root.slParseTags = function (value) {
@@ -89,6 +118,14 @@
   };
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { DEFAULTS };
+    module.exports = {
+      DEFAULTS,
+      slFormatClock: root.slFormatClock,
+      slTranscriptText: root.slTranscriptText,
+      slTranscriptFilename: root.slTranscriptFilename,
+      slParseTags: root.slParseTags,
+      slColorFor: root.slColorFor,
+      slTopColor: root.slTopColor,
+    };
   }
 })(typeof self !== 'undefined' ? self : globalThis);

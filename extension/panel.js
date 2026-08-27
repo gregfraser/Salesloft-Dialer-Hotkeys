@@ -66,11 +66,8 @@ function setConnection(state, detail) {
   if (detail) setStatus(detail, state === 'error' ? 'err' : undefined);
 }
 
-function formatClock(seconds) {
-  const total = Math.max(0, Math.floor(seconds));
-  const minutes = String(Math.floor(total / 60)).padStart(2, '0');
-  return `${minutes}:${String(total % 60).padStart(2, '0')}`;
-}
+// Shared with the on-page transcript so a line reads the same in both.
+const formatClock = self.slFormatClock;
 
 function startTimer() {
   if (view.timerHandle) return;
@@ -146,7 +143,7 @@ els.pause.addEventListener('click', () => {
 });
 
 function transcriptAsText() {
-  return view.entries.map((e) => `[${formatClock(e.start)}] ${e.text}`).join('\n');
+  return self.slTranscriptText(view.entries);
 }
 
 els.copy.addEventListener('click', async () => {
@@ -172,9 +169,8 @@ function saveTranscript() {
   const blob = new Blob([transcriptAsText()], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   link.href = url;
-  link.download = `transcript_${stamp}.txt`;
+  link.download = self.slTranscriptFilename();
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   view.unsaved = false;
@@ -244,6 +240,23 @@ chrome.runtime.onMessage.addListener((msg) => {
 
   if (msg.type === 'transcription-status') setConnection(msg.state, msg.detail);
 
+  // Pause is one state shared with the on-page transcript; the worker echoes
+  // whichever one the rep clicked so both show what capture is really doing.
+  if (msg.type === 'transcription-paused') {
+    view.paused = !!msg.paused;
+    els.pause.setAttribute('aria-pressed', String(view.paused));
+    els.pause.textContent = view.paused ? '▶' : '⏸';
+    els.pause.title = view.paused ? 'Resume transcription' : 'Pause transcription';
+  }
+
+  // Transcription on means the transcript is always kept. The worker asks one
+  // surface to save — this panel when it is open, the on-page transcript
+  // otherwise — once the server has flushed the call's last utterance. Saving
+  // here rather than on call-end is what keeps that last line in the file.
+  if (msg.type === 'save-transcript') {
+    if (view.unsaved && view.entries.length) saveTranscript();
+  }
+
   if (msg.type === 'call-state') {
     if (msg.state === 'IN_CALL') {
       startTimer();
@@ -251,10 +264,6 @@ chrome.runtime.onMessage.addListener((msg) => {
       if (empty) empty.textContent = 'Listening…';
     } else {
       stopTimer();
-      // Transcription on means the transcript is always kept: save whatever
-      // this call produced the moment it ends, silently — no prompt, no focus
-      // steal, and never twice for the same lines.
-      if (view.unsaved && view.entries.length) saveTranscript();
     }
   }
 });

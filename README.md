@@ -126,7 +126,7 @@ Click the extension's icon in your toolbar to open settings:
 | **Tags to watch** | Which tags trigger an alert, comma separated. Starts with No Interest, Meeting Scheduled, Interested. Each one must match Salesloft's wording exactly. The coloured pills underneath show you what each tag will look like. |
 | **Strict matching** | On by default: only counts a tag where Salesloft actually renders one — a pill on a logged call or meeting, a labelled Disposition/Sentiment field, or an activity table column. Keeps ordinary text like "we had a meeting scheduled last quarter" from setting it off. Turn it off only if your layout shows these tags somewhere unusual and you're not getting alerts. |
 | **Edit shortcuts** | Opens Chrome's shortcut settings if <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd>/<kbd>0</kbd> conflicts with something else or you'd prefer different keys. |
-| **Live transcription** | Turns the transcript panel on. Transcription then starts by itself as soon as a call is detected, and the transcript is saved automatically when the call ends — text only, never audio. Needs the transcription server running — see below. |
+| **Live transcription** | Turns the transcript on, in the floating panel and beside the on-page buttons. Transcription then starts by itself as soon as a call is detected, and the panel saves the transcript when the call ends — text only, never audio. Needs the transcription server running — see below. |
 | **Call audio output** | Which device you actually listen on. Get this wrong and the call plays somewhere you can't hear it. |
 
 
@@ -175,10 +175,25 @@ Salesloft and press it again.
 
 ### Reading it
 
-The transcript appears in the floating panel. Scroll up to read something
-earlier and it stops auto-scrolling; scroll back to the bottom and it resumes.
-The buttons along the top are pause, copy everything, save as a text file, and
-clear.
+The transcript shows up in two places, and you can use either: the floating
+panel, and a pane that appears beside the on-page buttons in the corner of the
+Salesloft page. Both show the same words at the same time.
+
+Scroll up to read something earlier and it stops auto-scrolling — a **↓ New
+text** pill appears to tell you more has arrived. Scroll back to the bottom, or
+click the pill, and it resumes. The buttons are pause, copy everything, save as
+a text file, and clear.
+
+The on-page pane keeps the last few calls, one after another with a divider
+between them, so you can still look back at the previous conversation while
+you're dialing the next person.
+
+> [!NOTE]
+> The floating panel saves each call's transcript by itself. The on-page pane
+> doesn't — Chrome only lets a web page save files when you click, so when the
+> panel is closed the pane says "Transcript ready — ↓ to save" at the end of a
+> call and waits for you. Keep the floating panel open if you'd rather never
+> think about it.
 
 > [!TIP]
 > Treat the transcript as an aid, not a record of truth. Phone audio is
@@ -206,6 +221,7 @@ Run the tests:
 python -m pytest tests/                        # server, protocol, benchmark
 node --test tests/test_salesloft_detection.js  # Salesloft DOM detection
 node --test tests/test_pcm_worklet.js          # audio downsampling
+node --test tests/test_transcript_format.js    # shared transcript formatting
 ```
 
 ---

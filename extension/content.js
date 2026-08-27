@@ -22,6 +22,12 @@
       settings.pageOverlay = changes.pageOverlay.newValue;
       settings.pageOverlay ? buildOverlay() : removeOverlay();
     }
+    // Turning transcription on or off adds or removes the transcript pane, so
+    // the overlay is rebuilt. Lines already on screen are carried across.
+    if (changes.transcription) {
+      settings.transcription = changes.transcription.newValue;
+      if (settings.pageOverlay) buildOverlay();
+    }
   });
 
   const CONFIG = { keyKill: 'F8', keyCall: 'F9', stepTimeout: 8000, autoAdvanceDelayMs: 400 };
@@ -158,6 +164,30 @@
       if (msg.action === 'kill-and-log') killAndLog();
       if (msg.action === 'start-call') startCall();
     }
+
+    // Transcription traffic, relayed by the background worker: content scripts
+    // do not receive the offscreen document's broadcasts directly.
+    if (msg.type === 'transcript' && msg.payload) addTranscriptEntry(msg.payload);
+    if (msg.type === 'transcription-status') {
+      setTranscriptConnection(msg.state);
+      // Only errors are worth taking the status line for — "not armed" is the
+      // one the rep has to act on. Written straight to the element rather than
+      // through setStatus(), because the panel already has this message from
+      // the worker and would otherwise show it twice.
+      if (msg.state === 'error' && msg.detail && statusEl) {
+        statusEl.textContent = msg.detail;
+        statusEl.style.color = '#ffb4a8';
+      }
+    }
+    if (msg.type === 'transcription-paused') {
+      txView.paused = !!msg.paused;
+      renderPaused();
+    }
+    // The call ended with lines nothing has saved, because the floating panel
+    // (which would have) is closed. Offer it in the status line; never grab a
+    // download the rep did not ask for.
+    if (msg.type === 'transcript-unsaved') offerSave();
+
     sendResponse({ ok: true });
   });
 
@@ -174,12 +204,36 @@
   }
 
   // ---------------- Optional on-page overlay ----------------
+  const OVERLAY_ID = 'sl-hotkey-overlay';
+  const CONTROLS_WIDTH = 240;   // the button column, unchanged whatever else is shown
+  const TRANSCRIPT_WIDTH = 300;
+  const TRANSCRIPT_HEIGHT = 152;
+
   let alertEl;
+  let tx = null; // transcript DOM refs, or null when the pane is not shown
+
+  // Transcript state outlives the DOM: rebuilding the overlay (a settings
+  // toggle, a stale copy being replaced) must not lose lines that are already
+  // on screen, or a call would end with nothing to save.
+  const txView = {
+    entries: [],
+    autoScroll: true,
+    paused: false,
+    unsaved: false,       // lines added since the last save
+    pendingNewCall: false, // draw a divider before the next call's first line
+    startedAt: 0,
+    timerHandle: null,
+  };
+
+  // The lines are kept in full for saving; only the rendered nodes are capped,
+  // so a whole day of dialing cannot pile up DOM on the Salesloft page.
+  const MAX_RENDERED_LINES = 400;
 
   function removeOverlay() {
-    document.getElementById('sl-hotkey-overlay')?.remove();
+    document.getElementById(OVERLAY_ID)?.remove();
     statusEl = null;
     alertEl = null;
+    tx = null;
   }
 
   // Subtle mirror of the contact alert inside the overlay — one tinted line,
@@ -203,6 +257,21 @@
   }
   window.__slOnContactAlert = renderOverlayAlert;
 
+  // The only rules that cannot be expressed as inline styles. It lives inside
+  // the overlay so removeOverlay() takes it with everything else, and so the
+  // <style> node never lands in <head> where alerts.js would see it mutate.
+  function overlayStyle() {
+    const style = document.createElement('style');
+    style.textContent = [
+      '@keyframes sl-pulse{0%,100%{opacity:1}50%{opacity:.35}}',
+      `#${OVERLAY_ID} ::-webkit-scrollbar{width:8px}`,
+      `#${OVERLAY_ID} ::-webkit-scrollbar-thumb{background:#3a3d42;border-radius:4px}`,
+      `#${OVERLAY_ID} ::-webkit-scrollbar-thumb:hover{background:#4c5057}`,
+      `#${OVERLAY_ID} ::-webkit-scrollbar-track{background:transparent}`,
+    ].join('');
+    return style;
+  }
+
   function buildOverlay() {
     if (!document.body) return;
     // An overlay may already exist, left behind by a previous copy of this
@@ -211,16 +280,26 @@
     // than keep it.
     removeOverlay();
     const box = document.createElement('div');
-    box.id = 'sl-hotkey-overlay';
+    box.id = OVERLAY_ID;
     box.style.cssText = [
-      // Fixed position AND fixed width: the box must never grow, shrink or
-      // shift as the status text changes length — long messages wrap instead.
+      // Anchored bottom-left, and every part of it a fixed size: the buttons
+      // must stay under the same pixels all day, however long the status line
+      // gets or how much the prospect says. Text wraps and scrolls; the box
+      // itself only ever changes when transcription is switched on or off.
       'position:fixed', 'bottom:16px', 'left:16px', 'z-index:999999',
-      'width:240px', 'box-sizing:border-box',
-      'display:flex', 'flex-direction:column', 'gap:6px',
+      'box-sizing:border-box',
+      'display:flex', 'align-items:stretch', 'gap:10px',
       'background:#1c1e21', 'border:1px solid #3a3d42', 'border-radius:10px',
       'padding:10px', 'font-family:system-ui,sans-serif', 'font-size:12px',
+      'color:#e8e6e1',
       'box-shadow:0 4px 16px rgba(0,0,0,.35)', 'user-select:none',
+    ].join(';');
+    box.appendChild(overlayStyle());
+
+    const controls = document.createElement('div');
+    controls.style.cssText = [
+      `flex:0 0 ${CONTROLS_WIDTH}px`, `width:${CONTROLS_WIDTH}px`, 'box-sizing:border-box',
+      'display:flex', 'flex-direction:column', 'gap:6px',
     ].join(';');
 
     const row = document.createElement('div');
@@ -229,7 +308,7 @@
     const mkBtn = (label, sub, bg, onClick) => {
       const b = document.createElement('button');
       b.innerHTML = `<div style="font-weight:600;font-size:13px;">${label}</div><div style="opacity:.75;font-size:10px;margin-top:2px;">${sub}</div>`;
-      b.style.cssText = `flex:1;padding:10px 14px;border:none;border-radius:8px;cursor:pointer;color:#fff;background:${bg};text-align:center;line-height:1.2;`;
+      b.style.cssText = `flex:1;padding:10px 14px;border:none;border-radius:8px;cursor:pointer;color:#fff;background:${bg};text-align:center;line-height:1.2;font-family:inherit;`;
       b.addEventListener('click', onClick);
       return b;
     };
@@ -244,14 +323,343 @@
     ].join(';');
 
     statusEl = document.createElement('div');
-    statusEl.style.cssText = 'min-height:14px;color:#e8e6e1;overflow-wrap:break-word;';
+    // margin-top:auto settles it against the bottom of the column, so with the
+    // transcript alongside it lines up with the foot of the pane instead of
+    // floating in the middle. With no transcript there is no slack and it sits
+    // under the buttons as before.
+    statusEl.style.cssText =
+      'margin-top:auto;min-height:14px;color:#e8e6e1;overflow-wrap:break-word;';
     statusEl.textContent = 'Ready';
 
-    box.appendChild(row);
-    box.appendChild(alertEl);
-    box.appendChild(statusEl);
+    controls.appendChild(row);
+    controls.appendChild(alertEl);
+    controls.appendChild(statusEl);
+    box.appendChild(controls);
+
+    if (settings.transcription) box.appendChild(buildTranscript());
+
     document.body.appendChild(box);
     renderOverlayAlert(window.__slContactAlert || null);
+    // scrollHeight is 0 until the box is in the document, so carried-over lines
+    // can only be scrolled into view once it is.
+    if (tx) tx.list.scrollTop = tx.list.scrollHeight;
+  }
+
+  // ---------------- Live transcript pane ----------------
+  // The same lines the floating panel shows, on the page itself, for reps who
+  // do not want a second window. This pane only renders: the audio never
+  // touches this script, the lines are relayed by the background worker, and
+  // nothing here clicks a Salesloft control.
+
+  function iconButton(glyph, title, onClick) {
+    const b = document.createElement('button');
+    b.textContent = glyph;
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    b.style.cssText = [
+      'background:none', 'border:1px solid #3a3d42', 'color:#e8e6e1',
+      'border-radius:6px', 'padding:0', 'width:26px', 'height:24px',
+      'font-size:11px', 'line-height:1', 'cursor:pointer', 'font-family:inherit',
+      'flex:0 0 auto',
+    ].join(';');
+    // Resting colour is a property rather than a constant so a button can be
+    // highlighted (the save nudge) without hover wiping it.
+    b.restBorder = '#3a3d42';
+    b.addEventListener('mouseenter', () => { b.style.borderColor = '#5a5e66'; });
+    b.addEventListener('mouseleave', () => { b.style.borderColor = b.restBorder; });
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function buildTranscript() {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:6px;align-items:stretch;';
+
+    const pane = document.createElement('div');
+    pane.style.cssText = [
+      'position:relative', `flex:0 0 ${TRANSCRIPT_WIDTH}px`, `width:${TRANSCRIPT_WIDTH}px`,
+      'box-sizing:border-box', 'display:flex', 'flex-direction:column',
+      'background:#141618', 'border:1px solid #3a3d42', 'border-radius:8px',
+      'overflow:hidden',
+    ].join(';');
+
+    const bar = document.createElement('div');
+    bar.style.cssText = [
+      'display:flex', 'align-items:center', 'gap:7px', 'padding:5px 8px',
+      'background:#26282c', 'border-bottom:1px solid #3a3d42', 'flex:0 0 auto',
+    ].join(';');
+
+    const dot = document.createElement('span');
+    dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:#6b6f76;flex:0 0 auto;';
+
+    const connection = document.createElement('span');
+    connection.style.cssText = 'font-weight:600;letter-spacing:.04em;font-size:10px;color:#9aa0a6;';
+    connection.textContent = 'OFFLINE';
+
+    const timer = document.createElement('span');
+    timer.style.cssText = 'margin-left:auto;font-variant-numeric:tabular-nums;color:#9aa0a6;font-size:11px;';
+    timer.textContent = '00:00';
+
+    bar.appendChild(dot);
+    bar.appendChild(connection);
+    bar.appendChild(timer);
+
+    const list = document.createElement('div');
+    list.style.cssText = [
+      `height:${TRANSCRIPT_HEIGHT}px`, 'overflow-y:auto', 'padding:8px 9px',
+      // Read out of the corner of the eye mid-sentence, so it stays larger and
+      // higher-contrast than the rest of the overlay.
+      'font-size:13px', 'line-height:1.45', 'user-select:text', 'cursor:text',
+      'overflow-wrap:break-word',
+    ].join(';');
+
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:#9aa0a6;font-size:12px;font-style:italic;';
+    empty.textContent = 'Waiting for the call to start…';
+    list.appendChild(empty);
+
+    const hint = document.createElement('button');
+    hint.textContent = '↓ New text';
+    hint.style.cssText = [
+      'display:none', 'position:absolute', 'right:10px', 'bottom:8px',
+      'background:#3a3d42', 'color:#e8e6e1', 'border:none', 'border-radius:12px',
+      'padding:3px 9px', 'font-size:10px', 'cursor:pointer', 'font-family:inherit',
+      'box-shadow:0 2px 6px rgba(0,0,0,.4)',
+    ].join(';');
+    hint.addEventListener('click', () => {
+      txView.autoScroll = true;
+      list.scrollTop = list.scrollHeight;
+      hint.style.display = 'none';
+    });
+
+    list.addEventListener('scroll', () => {
+      // Scroll-lock: the rep is reading back something earlier, so new lines
+      // must not yank the view away from them.
+      const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+      txView.autoScroll = fromBottom < 24;
+      if (txView.autoScroll) hint.style.display = 'none';
+    });
+
+    pane.appendChild(bar);
+    pane.appendChild(list);
+    pane.appendChild(hint);
+
+    const rail = document.createElement('div');
+    rail.style.cssText = 'display:flex;flex-direction:column;gap:5px;flex:0 0 auto;';
+    const pause = iconButton('⏸', 'Pause transcription', togglePause);
+    const save = iconButton('↓', 'Save transcript as text', () => {
+      if (saveTranscript()) setStatus('Transcript saved', 'ok');
+      else setStatus('Nothing to save');
+    });
+    rail.appendChild(pause);
+    rail.appendChild(iconButton('⧉', 'Copy transcript', copyTranscript));
+    rail.appendChild(save);
+    rail.appendChild(iconButton('✕', 'Clear transcript', clearTranscript));
+
+    wrap.appendChild(pane);
+    wrap.appendChild(rail);
+
+    tx = { list, empty, dot, connection, timer, hint, pause, save };
+    // A rebuild (settings toggle, or replacing a stale overlay) must not lose
+    // what is already on screen.
+    const shown = txView.entries.slice(-MAX_RENDERED_LINES);
+    if (shown.length) {
+      empty.remove();
+      tx.empty = null;
+      for (const entry of shown) appendEntryNode(entry);
+    }
+    renderPaused();
+    return wrap;
+  }
+
+  function appendEntryNode(entry) {
+    if (!tx) return;
+
+    if (entry.newCall && tx.list.childElementCount) {
+      const divider = document.createElement('div');
+      divider.style.cssText = [
+        'margin:10px 0 8px', 'border-top:1px solid #2c2f34', 'padding-top:6px',
+        'color:#6b6f76', 'font-size:10px', 'letter-spacing:.06em', 'text-transform:uppercase',
+      ].join(';');
+      divider.textContent = 'Next call';
+      tx.list.appendChild(divider);
+    }
+
+    const line = document.createElement('div');
+    line.style.cssText = 'margin-bottom:7px;';
+
+    const time = document.createElement('span');
+    time.style.cssText =
+      'color:#9aa0a6;font-size:11px;font-variant-numeric:tabular-nums;margin-right:6px;';
+    time.textContent = window.slFormatClock(entry.start);
+    if (entry.merged > 1) {
+      // Coalesced under backpressure: the speech is all there, the timestamps
+      // are approximate.
+      time.textContent += ' ~';
+      time.style.color = '#e0a020';
+      time.title = 'Coalesced under load — timestamps approximate';
+    }
+
+    const text = document.createElement('span');
+    text.style.color = '#e8e6e1';
+    text.textContent = entry.text;
+
+    line.appendChild(time);
+    line.appendChild(text);
+    tx.list.appendChild(line);
+  }
+
+  function addTranscriptEntry(payload) {
+    // No pane means no transcript to keep: the lines still reach the floating
+    // panel, and holding a day of them here for nobody to read would be a leak.
+    // A rebuild swaps the DOM synchronously, so this cannot drop a live line.
+    if (!tx) return;
+    const entry = {
+      start: payload.start || 0,
+      text: payload.text || '',
+      merged: payload.merged || 1,
+    };
+    if (!entry.text) return;
+    // Only mark a boundary once the next call actually says something, so a
+    // dial that nobody picks up leaves no divider behind.
+    if (txView.pendingNewCall) {
+      entry.newCall = true;
+      txView.pendingNewCall = false;
+    }
+    txView.entries.push(entry);
+    txView.unsaved = true;
+
+    if (tx.empty) { tx.empty.remove(); tx.empty = null; }
+    appendEntryNode(entry);
+    while (tx.list.childElementCount > MAX_RENDERED_LINES) tx.list.firstElementChild.remove();
+
+    if (txView.autoScroll) {
+      tx.list.scrollTop = tx.list.scrollHeight;
+      tx.hint.style.display = 'none';
+    } else {
+      tx.hint.style.display = 'block';
+    }
+  }
+
+  function setTranscriptConnection(state) {
+    if (!tx) return;
+    const labels = { ready: 'LIVE', busy: 'LIVE', degraded: 'BEHIND', error: 'ERROR', offline: 'OFFLINE' };
+    const colors = { ready: '#ff5c4d', busy: '#ff5c4d', degraded: '#e0a020', error: '#6b6f76', offline: '#6b6f76' };
+    const live = state === 'ready' || state === 'busy';
+    tx.connection.textContent = labels[state] || 'OFFLINE';
+    tx.connection.style.color = live ? '#e8e6e1' : '#9aa0a6';
+    tx.dot.style.background = colors[state] || '#6b6f76';
+    tx.dot.style.animation = live ? 'sl-pulse 1.6s ease-in-out infinite' : 'none';
+  }
+
+  function renderPaused() {
+    if (!tx) return;
+    tx.pause.textContent = txView.paused ? '▶' : '⏸';
+    tx.pause.title = txView.paused ? 'Resume transcription' : 'Pause transcription';
+    tx.pause.style.background = txView.paused ? '#3a3d42' : 'none';
+  }
+
+  function togglePause() {
+    txView.paused = !txView.paused;
+    renderPaused();
+    safeSend({ type: 'transcription-command', action: 'pause', paused: txView.paused });
+    setStatus(txView.paused ? 'Transcription paused' : 'Transcription resumed');
+  }
+
+  function clearTranscript() {
+    txView.entries = [];
+    txView.unsaved = false;
+    txView.autoScroll = true;
+    txView.pendingNewCall = false;
+    if (!tx) return;
+    clearSaveOffer();
+    tx.list.textContent = '';
+    tx.empty = document.createElement('div');
+    tx.empty.style.cssText = 'color:#9aa0a6;font-size:12px;font-style:italic;';
+    tx.empty.textContent = 'Cleared.';
+    tx.list.appendChild(tx.empty);
+    tx.hint.style.display = 'none';
+  }
+
+  // Text only, never audio. Returns false when there is nothing to write.
+  //
+  // Only ever called from the ↓ button. Chrome allows a page one download
+  // without a click and then asks the user's permission for the rest, so an
+  // automatic save from here would put a prompt on the Salesloft page partway
+  // through a call block. The floating panel is an extension page and is under
+  // no such limit, which is why it — not this — does the saving on its own.
+  function saveTranscript() {
+    if (!txView.entries.length) return false;
+    const blob = new Blob([window.slTranscriptText(txView.entries)], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = window.slTranscriptFilename();
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    txView.unsaved = false;
+    clearSaveOffer();
+    return true;
+  }
+
+  // Quiet, and quiet is the point: a line in the status the rep already reads,
+  // plus a highlight on the button that acts on it. No modal, no focus steal.
+  function offerSave() {
+    if (!tx || !txView.unsaved || !txView.entries.length) return;
+    setStatus(`Transcript ready (${txView.entries.length} lines) — ↓ to save`, 'warn');
+    tx.save.restBorder = '#b8860b';
+    tx.save.style.borderColor = '#b8860b';
+    tx.save.style.color = '#ffd88a';
+  }
+
+  function clearSaveOffer() {
+    if (!tx) return;
+    tx.save.restBorder = '#3a3d42';
+    tx.save.style.borderColor = '#3a3d42';
+    tx.save.style.color = '#e8e6e1';
+  }
+
+  async function copyTranscript() {
+    if (!txView.entries.length) { setStatus('Nothing to copy'); return; }
+    const text = window.slTranscriptText(txView.entries);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      // The clipboard API needs focus and can refuse; fall back rather than
+      // fail. The scratch node goes inside the overlay, which alerts.js
+      // already ignores, so this cannot set off a contact-alert rescan.
+      const scratch = document.createElement('textarea');
+      scratch.style.cssText = 'position:absolute;opacity:0;pointer-events:none;';
+      scratch.value = text;
+      (document.getElementById(OVERLAY_ID) || document.body).appendChild(scratch);
+      scratch.select();
+      try { document.execCommand('copy'); } catch (e) { /* nothing more to try */ }
+      scratch.remove();
+    }
+    setStatus(`Copied ${txView.entries.length} lines`, 'ok');
+  }
+
+  function startTranscriptTimer() {
+    if (txView.timerHandle) return;
+    txView.startedAt = Date.now();
+    if (tx) tx.timer.textContent = '00:00';
+    txView.timerHandle = setInterval(() => {
+      if (tx) tx.timer.textContent = window.slFormatClock((Date.now() - txView.startedAt) / 1000);
+    }, 1000);
+  }
+
+  function stopTranscriptTimer() {
+    clearInterval(txView.timerHandle);
+    txView.timerHandle = null;
+  }
+
+  // A new call keeps the previous one on screen behind a divider rather than
+  // wiping it: nothing here saves on its own, so clearing would be the one way
+  // this pane could lose speech the rep never got to read or keep.
+  function onTranscriptCallStart() {
+    if (txView.entries.length) txView.pendingNewCall = true;
+    if (tx && tx.empty) tx.empty.textContent = 'Listening…';
+    startTranscriptTimer();
   }
 
   // ---------------- In-page fallback hotkeys (F8/F9) ----------------
@@ -287,6 +695,11 @@
     if (result.state === lastCallState) return;
     lastCallState = result.state;
     safeSend({ type: 'call-state', state: result.state, tier: result.tier });
+
+    // The transcript pane follows the call it is transcribing. This is still
+    // observation only — nothing below clicks anything.
+    if (result.state === 'IN_CALL') onTranscriptCallStart();
+    else stopTranscriptTimer();
   }
 
   function scheduleDetect() {
@@ -297,10 +710,16 @@
   }
 
   if (typeof MutationObserver === 'function') {
-    new MutationObserver(scheduleDetect).observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-    });
+    // Ignore our own overlay, which churns with every transcript line once a
+    // call is running. Only Salesloft's DOM can change the call state, and
+    // alerts.js filters the same way for the same reason.
+    new MutationObserver((records) => {
+      for (const record of records) {
+        const node = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+        if (node && node.closest && node.closest(`#${OVERLAY_ID}`)) continue;
+        return scheduleDetect();
+      }
+    }).observe(document.documentElement, { childList: true, subtree: true });
     reportCallState();
   }
 })();
