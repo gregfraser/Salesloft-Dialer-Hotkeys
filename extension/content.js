@@ -210,8 +210,9 @@
   function setStatus(msg, kind) {
     if (statusEl) {
       statusEl.textContent = msg;
-      // The element shows at most two lines (see STATUS_HEIGHT); the tooltip is
-      // where the whole of a long "Stopped: …" stays readable.
+      // The element shows one line, or two when there is no transcript beside
+      // it; the tooltip is where the whole of a long "Stopped: …" stays
+      // readable.
       statusEl.title = msg;
       statusEl.style.color =
         kind === 'err' ? '#ffb4a8' : kind === 'warn' ? '#ffd88a' : kind === 'ok' ? '#a8e6b8' : '#e8e6e1';
@@ -229,13 +230,20 @@
   // and why these are constants rather than whatever the content needs.
   const CONTROLS_WIDTH = 240;   // the button column, unchanged whatever else is shown
   const TRANSCRIPT_WIDTH = 300;
-  const PANEL_HEIGHT = 184;     // the pane, the rail, and the column beside them
+  const PANEL_HEIGHT = 184;     // the buttons, the pane and the rail: one row, one height
   const STACK_GAP = 6;
-  const STATUS_HEIGHT = 30;     // two clamped lines, reserved either way
+  const RAIL_GAP = 8;
+  // Reserved, never measured — that is what stops a long "Stopped: …" moving
+  // the buttons. Beside a transcript the box is wide enough for any of them on
+  // one line; on its own it is 240px, where the long ones need two. Either way
+  // the tooltip carries whatever still does not fit.
+  const STATUS_ONE_LINE = 17;
+  const STATUS_TWO_LINES = 30;
   // With a transcript beside them the buttons stretch to meet it — same column
-  // width, twice the target. With nothing to match they stay short.
-  const BUTTONS_TALL = PANEL_HEIGHT - STACK_GAP - STATUS_HEIGHT;
-  const BUTTONS_SHORT = 62;
+  // width, the pane's full height. With nothing to match they stay short: tall
+  // enough for the glyph, the label and the keycaps and no taller, so the
+  // dialer-only overlay is the smallest thing that still says what it does.
+  const BUTTONS_SHORT = 86;
 
   let alertEl;
   let overlayEl = null; // the box this copy of the script built, if any
@@ -374,15 +382,15 @@
     b.type = 'button';
     b.title = `${label} — ${keys.join(' or ')}`;
     b.innerHTML =
-      `<span style="font-size:17px;line-height:1">${glyph}</span>` +
-      `<span style="font-size:13px;font-weight:600;line-height:1.15">${label}</span>` +
+      `<span style="font-size:24px;line-height:1">${glyph}</span>` +
+      `<span style="font-size:14px;font-weight:600;line-height:1.15">${label}</span>` +
       `<span style="display:flex;gap:4px">${keys
         .map((k) => `<span class="sl-key">${k}</span>`)
         .join('')}</span>`;
     b.style.cssText = [
       'flex:1 1 0', 'min-width:0', 'height:100%', 'box-sizing:border-box',
       'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
-      'gap:5px', 'padding:6px 8px', 'border:none', 'border-radius:9px',
+      'gap:7px', 'padding:6px 8px', 'border:none', 'border-radius:9px',
       'cursor:pointer', 'color:#fff', `background:${background}`,
       'box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 1px 2px rgba(0,0,0,.35)',
       'text-align:center', 'font-family:inherit',
@@ -439,16 +447,14 @@
     const main = document.createElement('div');
     main.style.cssText = 'display:flex;align-items:stretch;gap:10px;';
 
-    const controls = document.createElement('div');
-    controls.style.cssText = [
-      `flex:0 0 ${CONTROLS_WIDTH}px`, `width:${CONTROLS_WIDTH}px`, 'box-sizing:border-box',
-      'display:flex', 'flex-direction:column', `gap:${STACK_GAP}px`,
-    ].join(';');
-
+    // The buttons, the pane and the rail are one row at one height, so the
+    // block reads as a block: the buttons finish exactly where the pane does
+    // instead of stopping short of it.
     const row = document.createElement('div');
     row.style.cssText = [
-      'display:flex', 'gap:8px', 'flex:0 0 auto',
-      `height:${hasTranscript ? BUTTONS_TALL : BUTTONS_SHORT}px`,
+      `flex:0 0 ${CONTROLS_WIDTH}px`, `width:${CONTROLS_WIDTH}px`, 'box-sizing:border-box',
+      'display:flex', 'gap:8px',
+      `height:${hasTranscript ? PANEL_HEIGHT : BUTTONS_SHORT}px`,
     ].join(';');
 
     const kill = actionButton('✕', 'No Answer', [CONFIG.keyKill, 'Ctrl⇧9'],
@@ -459,24 +465,24 @@
     row.appendChild(call);
     ctl = { kill, call, row };
 
-    statusEl = document.createElement('div');
-    statusEl.style.cssText = [
-      'flex:0 0 auto', `height:${STATUS_HEIGHT}px`, 'box-sizing:border-box',
-      'color:#e8e6e1', 'line-height:15px', 'overflow-wrap:break-word',
-      // Two lines and no more. The height is reserved either way, so even
-      // "Stopped: Timed out waiting for element. Finish manually." cannot move
-      // anything; the tooltip carries what does not fit.
-      'display:-webkit-box', '-webkit-line-clamp:2', '-webkit-box-orient:vertical',
-      'overflow:hidden',
-    ].join(';');
-    statusEl.textContent = 'Ready';
-
-    controls.appendChild(row);
-    controls.appendChild(statusEl);
-    main.appendChild(controls);
-
+    main.appendChild(row);
     if (hasTranscript) main.appendChild(buildTranscript());
     box.appendChild(main);
+
+    // Under the whole box rather than inside the button column: a sentence
+    // reads better across the width than down 240px, and the row above keeps
+    // its full height instead of giving a third of it up to one word.
+    statusEl = document.createElement('div');
+    statusEl.style.cssText = [
+      'flex:0 0 auto',
+      `height:${hasTranscript ? STATUS_ONE_LINE : STATUS_TWO_LINES}px`,
+      'box-sizing:border-box',
+      'color:#e8e6e1', 'line-height:15px', 'overflow-wrap:break-word',
+      'display:-webkit-box', `-webkit-line-clamp:${hasTranscript ? 1 : 2}`,
+      '-webkit-box-orient:vertical', 'overflow:hidden',
+    ].join(';');
+    statusEl.textContent = 'Ready';
+    box.appendChild(statusEl);
 
     document.body.appendChild(box);
     overlayEl = box;
@@ -542,7 +548,7 @@
 
   function buildTranscript() {
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;gap:6px;align-items:stretch;';
+    wrap.style.cssText = `display:flex;gap:${RAIL_GAP}px;align-items:stretch;`;
 
     const pane = document.createElement('div');
     pane.style.cssText = [
@@ -622,14 +628,23 @@
     // controls, so this column is the same whether the pane is there or not.
     const rail = document.createElement('div');
     rail.style.cssText = [
+      'position:relative',
       'display:flex', 'flex-direction:column', 'align-items:center',
-      'justify-content:center', 'gap:5px',
+      // The five buttons are centred against the pane they belong to, evenly
+      // spaced and evenly inset top and bottom.
+      'justify-content:center', 'gap:8px',
       'flex:0 0 auto', `height:${PANEL_HEIGHT}px`,
     ].join(';');
 
+    // Out of the flow deliberately: in it, the light would hold a slot at the
+    // top that is empty whenever the pane is showing, pushing the buttons down
+    // and leaving the rail looking bottom-heavy against the pane.
     const railDot = document.createElement('span');
-    railDot.style.cssText =
-      'visibility:hidden;width:8px;height:8px;border-radius:50%;background:#6b6f76;flex:0 0 auto;';
+    railDot.style.cssText = [
+      'visibility:hidden', 'position:absolute', 'top:0', 'left:50%',
+      'transform:translateX(-50%)',
+      'width:8px', 'height:8px', 'border-radius:50%', 'background:#6b6f76',
+    ].join(';');
 
     const toggle = iconButton('«', 'Hide transcript', toggleTranscriptView);
     const pause = iconButton('⏸', 'Pause transcription', togglePause);
