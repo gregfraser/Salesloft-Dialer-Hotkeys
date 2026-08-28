@@ -22,7 +22,6 @@
       color: var(--text);
       font-family: system-ui, sans-serif;
       font-size: 12px;
-      user-select: none;
       display: flex;
       flex-direction: column;
       height: 100vh;
@@ -41,9 +40,10 @@
       line-height: 1.2;
       font-family: inherit;
     }
+    .row button { user-select: none; }
     .row button:active { transform: scale(0.97); }
     .label { font-weight: 600; font-size: 14px; }
-    .sub { opacity: 0.75; font-size: 10px; margin-top: 3px; }
+    .sub { opacity: 0.75; font-size: 11px; margin-top: 3px; }
     #kill { background: #c0392b; }
     #call { background: #1e7e46; }
 
@@ -86,7 +86,7 @@
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
     #connection { font-weight: 600; letter-spacing: .04em; font-size: 11px; }
-    #timer { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); }
+    #timer { margin-inline-start: auto; font-variant-numeric: tabular-nums; color: var(--muted); }
 
     .icon-btn {
       background: none;
@@ -119,7 +119,7 @@
     }
     .entry { margin-bottom: 10px; }
     .entry-time { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-    .entry-text { color: var(--text); }
+    .entry-text { color: var(--text); text-wrap: pretty; }
     .entry.merged .entry-time::after { content: " ~"; color: #e0a020; }
     #empty { color: var(--muted); font-size: 12px; font-style: italic; }
     .caret { display: inline-block; width: 7px; height: 15px; background: var(--muted); animation: pulse 1.1s infinite; vertical-align: text-bottom; }
@@ -127,7 +127,7 @@
     #scroll-hint {
       display: none;
       position: absolute;
-      right: 20px;
+      inset-inline-end: 20px;
       bottom: 18px;
       background: var(--border);
       color: var(--text);

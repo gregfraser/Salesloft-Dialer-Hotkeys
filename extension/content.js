@@ -223,6 +223,19 @@
   // ---------------- Optional on-page overlay ----------------
   const OVERLAY_ID = 'sl-hotkey-overlay';
 
+  // Four sizes, named for what they are for, and nothing off the scale. The
+  // overlay used to run 9/10/11/12/13px with no system behind it, and 9px is
+  // below the floor for UI text however dense the tool is. Weight and colour
+  // carry the rest of the hierarchy.
+  const TYPE = {
+    action: 13,     // the button labels — the largest thing here, and the point
+    read: 12,       // what the prospect said, and what the extension says back
+    caption: 11,    // timestamps, the call timer
+    overline: 10,   // keycaps and the uppercase labels; the floor
+  };
+  // Wrapping text needs 1.4 or better; a label on one line can sit tighter.
+  const LEADING = { read: 1.4, label: 1.15 };
+
   // Every part of the overlay is a fixed size. The two action buttons are what
   // the rep aims at all day, so nothing the extension displays — a long status
   // line, a contact alert appearing, a talkative prospect — is allowed to move
@@ -232,9 +245,17 @@
   const TRANSCRIPT_WIDTH = 280;
   const PANEL_HEIGHT = 120;     // the buttons, the pane and the rail: one row, one height
   const BOX_PAD = 8;
-  const MAIN_GAP = 8;           // between the button column and the pane
-  const STACK_GAP = 5;          // between the alert, the row and the status
+  // Grouping is carried by space, and space only groups when the gap between
+  // groups is at least twice the gap inside one. Inside the button pair is 6,
+  // and the rail belongs to the pane at 6, so the two groups sit 12 apart. The
+  // bands are each a shape of their own — a tinted banner, filled buttons, a
+  // bordered pane — so they need less, except the status, which is bare text
+  // and gets STATUS_GAP on top.
+  const MAIN_GAP = 12;          // the button column | the pane and its rail
+  const PAIR_GAP = 6;           // between the two action buttons
   const RAIL_GAP = 6;           // between the pane and its rail
+  const STACK_GAP = 6;          // between the alert band and the row
+  const STATUS_GAP = 10;        // the row to the status, which has no shape
   const ICON = 19;              // the rail's square buttons
   // Five rail buttons and their gaps have to fit PANEL_HEIGHT, which is what
   // stops the pane shrinking further.
@@ -242,9 +263,11 @@
   // Reserved, never measured — that is what stops a long "Stopped: …" moving
   // the buttons. Beside a transcript the box is wide enough for any of them on
   // one line; on its own it is 210px, where the long ones need two. Either way
-  // the tooltip carries whatever still does not fit.
-  const STATUS_ONE_LINE = 15;
-  const STATUS_TWO_LINES = 28;
+  // the tooltip carries whatever still does not fit. Derived from the scale
+  // rather than picked, so the reserve and the leading cannot drift apart.
+  const STATUS_LINE = Math.round(TYPE.read * LEADING.read);
+  const STATUS_ONE_LINE = STATUS_LINE;
+  const STATUS_TWO_LINES = STATUS_LINE * 2;
   // With a transcript beside them the buttons stretch to meet it — same column
   // width, the pane's full height. With nothing to match they stay short: tall
   // enough for the glyph, the label and the keycaps and no taller, so the
@@ -367,6 +390,11 @@
       `#${OVERLAY_ID} ::-webkit-scrollbar-thumb:hover{background:#4c5057}`,
       `#${OVERLAY_ID} ::-webkit-scrollbar-track{background:transparent}`,
       `#${OVERLAY_ID} button{font-family:inherit;margin:0}`,
+      // Selection off on the controls, where a double-click would highlight a
+      // label instead of firing the button — and on nothing else. The status
+      // and the contact alert stay selectable, because "Stopped: …" is the
+      // line a rep wants to paste into a message when something breaks.
+      `#${OVERLAY_ID} .sl-act,#${OVERLAY_ID} .sl-icon{user-select:none}`,
       `#${OVERLAY_ID} button:focus-visible{outline:2px solid #8ab4f8;outline-offset:2px}`,
       // Order matters below: hover, then press, then busy. All three are the
       // same specificity, so the later rule wins — the press has to beat the
@@ -377,11 +405,11 @@
       // nudge is invisible, and the point of press feedback is that the rep
       // sees the button answer before the flow starts.
       `#${OVERLAY_ID} .sl-act{transition:transform ${RELEASE_MS}ms ${EASE_OUT},filter ${RELEASE_MS}ms ease}`,
-      `#${OVERLAY_ID} .sl-key{background:rgba(255,255,255,.17);border-radius:3px;padding:1px 4px;font-size:9px;font-weight:600;letter-spacing:.02em;white-space:nowrap}`,
+      `#${OVERLAY_ID} .sl-key{background:rgba(255,255,255,.17);border-radius:3px;padding:1px 4px;font-size:${TYPE.overline}px;font-weight:600;letter-spacing:.03em;white-space:nowrap}`,
       // The small square buttons on the rail. Their resting look lives here so
       // that a highlight set inline — the save nudge, the paused state — can be
       // cleared back to it with an empty string.
-      `#${OVERLAY_ID} .sl-icon{background:transparent;border:1px solid #3a3d42;color:#e8e6e1;border-radius:6px;padding:0;font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto;transition:transform ${RELEASE_MS}ms ${EASE_OUT},background-color ${RELEASE_MS}ms ease,border-color ${RELEASE_MS}ms ease}`,
+      `#${OVERLAY_ID} .sl-icon{background:transparent;border:1px solid #3a3d42;color:#e8e6e1;border-radius:6px;padding:0;font-size:${TYPE.caption}px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto;transition:transform ${RELEASE_MS}ms ${EASE_OUT},background-color ${RELEASE_MS}ms ease,border-color ${RELEASE_MS}ms ease}`,
       `#${OVERLAY_ID} .sl-pill{transition:transform ${RELEASE_MS}ms ${EASE_OUT},filter ${RELEASE_MS}ms ease}`,
 
       // Hover is a mouse state. A touchscreen fires it on tap and then leaves
@@ -429,7 +457,7 @@
     b.innerHTML =
       '<span style="display:flex;flex-direction:column;align-items:center;gap:4px">' +
         `<span style="font-size:20px;line-height:1">${glyph}</span>` +
-        `<span style="font-size:13px;font-weight:600;line-height:1.15;letter-spacing:.01em">${label}</span>` +
+        `<span style="font-size:${TYPE.action}px;font-weight:600;line-height:${LEADING.label};letter-spacing:.01em">${label}</span>` +
       '</span>' +
       `<span style="display:flex;gap:3px">${keys
         .map((k) => `<span class="sl-key">${k}</span>`)
@@ -467,9 +495,12 @@
       'display:flex', 'flex-direction:column', `gap:${STACK_GAP}px`,
       'background:linear-gradient(180deg,#212429 0%,#191b1e 100%)',
       'border:1px solid #3a3d42', 'border-radius:10px',
-      `padding:${BOX_PAD}px`, 'font-family:system-ui,sans-serif', 'font-size:11px',
+      `padding:${BOX_PAD}px`, 'font-family:system-ui,sans-serif', `font-size:${TYPE.read}px`,
+      // Light text on a dark surface renders heavy on macOS. This box is its
+      // own root, so it is set once here rather than on each part of it.
+      '-webkit-font-smoothing:antialiased', '-moz-osx-font-smoothing:grayscale',
       'color:#e8e6e1',
-      'box-shadow:0 6px 22px rgba(0,0,0,.42)', 'user-select:none',
+      'box-shadow:0 6px 22px rgba(0,0,0,.42)',
     ].join(';');
     if (busy) box.classList.add('sl-busy');
     box.appendChild(overlayStyle());
@@ -486,7 +517,7 @@
       // decides how wide the overlay is.
       'width:0', 'min-width:100%',
       'padding:2px 7px', 'border:1px solid transparent', 'border-radius:5px',
-      'font-size:10px', 'font-weight:600', 'line-height:14px',
+      `font-size:${TYPE.read}px`, 'font-weight:600', 'line-height:16px',
       'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
     ].join(';');
     box.appendChild(alertEl);
@@ -500,7 +531,7 @@
     const row = document.createElement('div');
     row.style.cssText = [
       `flex:0 0 ${CONTROLS_WIDTH}px`, `width:${CONTROLS_WIDTH}px`, 'box-sizing:border-box',
-      'display:flex', 'gap:6px',
+      'display:flex', `gap:${PAIR_GAP}px`,
       `height:${hasTranscript ? PANEL_HEIGHT : BUTTONS_SHORT}px`,
     ].join(';');
 
@@ -529,7 +560,12 @@
       // child, and "Stopped: Timed out waiting for element. Finish manually."
       // stretches the whole overlay — the buttons with it.
       'width:0', 'min-width:100%',
-      'color:#e8e6e1', 'line-height:14px', 'overflow-wrap:break-word',
+      // The bands above it are all shapes; this is bare text, so the space is
+      // the only thing separating it from the row.
+      `margin-block-start:${STATUS_GAP - STACK_GAP}px`,
+      'color:#e8e6e1', `line-height:${STATUS_LINE}px`, 'overflow-wrap:break-word',
+      // Two lines is the worst case, and a stray last word reads as a mistake.
+      'text-wrap:pretty',
       'display:-webkit-box', `-webkit-line-clamp:${hasTranscript ? 1 : 2}`,
       '-webkit-box-orient:vertical', 'overflow:hidden',
     ].join(';');
@@ -562,6 +598,15 @@
     b.style.cssText = `width:${side}px;height:${side}px`;
     b.addEventListener('click', onClick);
     return b;
+  }
+
+  // The pane's placeholder — "Waiting…", "Listening…", "Cleared." It was built
+  // in two places at two different sizes; one builder means one size.
+  function emptyLine(text) {
+    const el = document.createElement('div');
+    el.style.cssText = `color:#9aa0a6;font-size:${TYPE.caption}px;font-style:italic;`;
+    el.textContent = text;
+    return el;
   }
 
   function saveFromButton() {
@@ -621,11 +666,13 @@
     dot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:#6b6f76;flex:0 0 auto;';
 
     const connection = document.createElement('span');
-    connection.style.cssText = 'font-weight:600;letter-spacing:.05em;font-size:9px;color:#9aa0a6;';
+    connection.style.cssText =
+      `font-weight:600;letter-spacing:.06em;font-size:${TYPE.overline}px;color:#9aa0a6;`;
     connection.textContent = 'OFFLINE';
 
     const timer = document.createElement('span');
-    timer.style.cssText = 'margin-left:auto;font-variant-numeric:tabular-nums;color:#9aa0a6;font-size:10px;';
+    timer.style.cssText =
+      `margin-inline-start:auto;font-variant-numeric:tabular-nums;color:#9aa0a6;font-size:${TYPE.caption}px;`;
     timer.textContent = '00:00';
 
     bar.appendChild(dot);
@@ -639,13 +686,13 @@
       'flex:1 1 auto', 'min-height:0', 'overflow-y:auto', 'padding:6px 8px',
       // Read out of the corner of the eye mid-sentence, so it stays larger and
       // higher-contrast than the rest of the overlay.
-      'font-size:12px', 'line-height:1.4', 'user-select:text', 'cursor:text',
-      'overflow-wrap:break-word',
+      `font-size:${TYPE.read}px`, `line-height:${LEADING.read}`, 'user-select:text', 'cursor:text',
+      // A prospect's sentence wraps to three lines often enough that an orphan
+      // on the last one is the normal case, not the edge one.
+      'overflow-wrap:break-word', 'text-wrap:pretty',
     ].join(';');
 
-    const empty = document.createElement('div');
-    empty.style.cssText = 'color:#9aa0a6;font-size:11px;font-style:italic;';
-    empty.textContent = 'Waiting for the call to start…';
+    const empty = emptyLine('Waiting for the call to start…');
     list.appendChild(empty);
 
     const hint = document.createElement('button');
@@ -653,9 +700,9 @@
     hint.type = 'button';
     hint.textContent = '↓ New text';
     hint.style.cssText = [
-      'display:none', 'position:absolute', 'right:8px', 'bottom:6px',
+      'display:none', 'position:absolute', 'inset-inline-end:8px', 'bottom:6px',
       'background:#3a3d42', 'color:#e8e6e1', 'border:none', 'border-radius:10px',
-      'padding:2px 8px', 'font-size:9px', 'cursor:pointer', 'font-family:inherit',
+      'padding:2px 8px', `font-size:${TYPE.overline}px`, 'cursor:pointer', 'font-family:inherit',
       'box-shadow:0 2px 6px rgba(0,0,0,.4)',
     ].join(';');
     hint.addEventListener('click', () => {
@@ -731,7 +778,7 @@
       const divider = document.createElement('div');
       divider.style.cssText = [
         'margin:7px 0 5px', 'border-top:1px solid #2c2f34', 'padding-top:4px',
-        'color:#6b6f76', 'font-size:9px', 'letter-spacing:.06em', 'text-transform:uppercase',
+        'color:#6b6f76', `font-size:${TYPE.overline}px`, 'letter-spacing:.06em', 'text-transform:uppercase',
       ].join(';');
       divider.textContent = 'Next call';
       tx.list.appendChild(divider);
@@ -742,7 +789,7 @@
 
     const time = document.createElement('span');
     time.style.cssText =
-      'color:#9aa0a6;font-size:10px;font-variant-numeric:tabular-nums;margin-right:5px;';
+      `color:#9aa0a6;font-size:${TYPE.caption}px;font-variant-numeric:tabular-nums;margin-inline-end:5px;`;
     time.textContent = window.slFormatClock(entry.start);
     if (entry.merged > 1) {
       // Coalesced under backpressure: the speech is all there, the timestamps
@@ -834,9 +881,7 @@
     if (!tx) return;
     clearSaveOffer();
     tx.list.textContent = '';
-    tx.empty = document.createElement('div');
-    tx.empty.style.cssText = 'color:#9aa0a6;font-size:12px;font-style:italic;';
-    tx.empty.textContent = 'Cleared.';
+    tx.empty = emptyLine('Cleared.');
     tx.list.appendChild(tx.empty);
     tx.hint.style.display = 'none';
   }
