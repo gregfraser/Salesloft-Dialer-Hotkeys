@@ -524,6 +524,11 @@
       'flex:0 0 auto',
       `height:${hasTranscript ? STATUS_ONE_LINE : STATUS_TWO_LINES}px`,
       'box-sizing:border-box',
+      // Same trick as the alert banner above: takes the box's width without
+      // getting a say in it. Without this the box is only as wide as its widest
+      // child, and "Stopped: Timed out waiting for element. Finish manually."
+      // stretches the whole overlay — the buttons with it.
+      'width:0', 'min-width:100%',
       'color:#e8e6e1', 'line-height:14px', 'overflow-wrap:break-word',
       'display:-webkit-box', `-webkit-line-clamp:${hasTranscript ? 1 : 2}`,
       '-webkit-box-orient:vertical', 'overflow:hidden',
