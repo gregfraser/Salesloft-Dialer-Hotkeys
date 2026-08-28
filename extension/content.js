@@ -318,7 +318,7 @@
     }
     const theme = (window.SL_PALETTE || {})[alert.color] ||
       { bg: '#3a3320', border: '#b8860b', text: '#ffd88a' };
-    const headline = (window.SL_HEADLINE || {})[alert.color] || 'Heads up before you dial';
+    const headline = (window.SL_HEADLINE || {})[alert.color] || 'Check before you dial';
     const text = `${headline} — ${alert.tags.join(' • ')}`;
     alertEl.textContent = text;
     alertEl.title = text;   // the banner is one line; narrow, it ellipsises

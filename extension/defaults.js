@@ -67,11 +67,17 @@
     amber: { bg: '#3a3320', border: '#b8860b', text: '#ffd88a' },
   };
 
+  // The line that leads the alert. The tags are rendered right beside it, so
+  // they already state the fact — this states what to do about it. Saying the
+  // fact twice ("Meeting already scheduled — Meeting Scheduled") wasted the
+  // only line the on-page banner has and pushed the tag itself out of view.
+  // Blue and red both say don't: the decision is the same either way, and the
+  // tag beside it says which kind of stop it is.
   root.SL_HEADLINE = {
-    blue:  'Meeting already scheduled',
-    red:   'No interest logged',
-    green: 'Marked interested',
-    amber: 'Heads up before you dial',
+    blue:  "Don't dial",
+    red:   "Don't dial again",
+    green: 'Read the notes first',
+    amber: 'Check before you dial',
   };
 
   // ---------------- Transcript formatting ----------------
@@ -164,6 +170,8 @@
       slIsContactUrl: root.slIsContactUrl,
       slColorFor: root.slColorFor,
       slTopColor: root.slTopColor,
+      SL_PALETTE: root.SL_PALETTE,
+      SL_HEADLINE: root.SL_HEADLINE,
     };
   }
 })(typeof self !== 'undefined' ? self : globalThis);
