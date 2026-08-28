@@ -218,6 +218,9 @@
   }
 
   // ---------------- Which contact are we looking at? ----------------
+  // Only ever compared, never displayed or sent: it is half of the key that
+  // notices the rep has moved to the next person, so the same tags on a new
+  // contact still raise a fresh alert.
   function contactName() {
     const selectors = [
       '[data-testid="person-details-name"]',
@@ -255,18 +258,17 @@
     if (signature === lastSignature) return;
     lastSignature = signature;
 
-    const name = contactName();
     const tags = matches.map((m) => m.tag);
     const color = self.slTopColor(tags);
 
-    window.__slContactAlert = matches.length ? { matches, tags, name, color } : null;
+    window.__slContactAlert = matches.length ? { matches, tags, color } : null;
     notifyOverlay();
 
     if (!matches.length) {
       report({ tags: [] });
       return;
     }
-    report({ tags, name, color });
+    report({ tags, color });
   }
 
   // Repaint the subtle alert line inside content.js's button overlay. Same

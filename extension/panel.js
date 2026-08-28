@@ -209,7 +209,7 @@ els.clear.addEventListener('click', () => {
 // booked meeting, red for a hard no, green for interest.
 const alertEl = document.getElementById('alert');
 
-function renderAlert({ tags = [], name = '', color = 'amber' }) {
+function renderAlert({ tags = [], color = 'amber' }) {
   if (!tags.length) {
     alertEl.className = '';
     alertEl.textContent = '';
@@ -220,16 +220,8 @@ function renderAlert({ tags = [], name = '', color = 'amber' }) {
   alertEl.style.borderColor = theme.border;
   alertEl.textContent = '';
 
-  // Whose tags these are, when the page gave us a name. No line of our own
-  // above them: the tags say it, and the colour says how much it matters.
-  if (name) {
-    const who = document.createElement('div');
-    who.className = 'who';
-    who.style.color = theme.text;
-    who.textContent = name;
-    alertEl.appendChild(who);
-  }
-
+  // The tags and nothing else: whoever is on screen is already named on the
+  // page the rep is looking at, and the colour says how much this matters.
   const list = document.createElement('div');
   list.className = 'tags';
   for (const tag of tags) {
