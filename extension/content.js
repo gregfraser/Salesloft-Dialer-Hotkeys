@@ -249,7 +249,15 @@
   // width, the pane's full height. With nothing to match they stay short: tall
   // enough for the glyph, the label and the keycaps and no taller, so the
   // dialer-only overlay is the smallest thing that still says what it does.
-  const BUTTONS_SHORT = 72;
+  const BUTTONS_SHORT = 76;
+
+  // The browser's own easings are too weak to read as deliberate at these
+  // durations, so the overlay uses one strong ease-out everywhere. Press is
+  // near-instant and release is relaxed: the press is the interface saying it
+  // heard the rep, and that has to land the moment the mouse goes down.
+  const EASE_OUT = 'cubic-bezier(.23,1,.32,1)';
+  const PRESS_MS = 60;
+  const RELEASE_MS = 160;
 
   let alertEl;
   let overlayEl = null; // the box this copy of the script built, if any
@@ -346,9 +354,10 @@
   // the overlay so removeOverlay() takes it with everything else, and so the
   // <style> node never lands in <head> where alerts.js would see it mutate.
   //
-  // Every interactive state here is a colour, a filter or a 1px nudge. None of
-  // them may change a size: a control that grew under the cursor would move the
-  // one beside it, which is the thing the fixed geometry exists to prevent.
+  // Every interactive state here is a colour or a transform. None of them may
+  // change a size in the layout sense: a control that grew under the cursor
+  // would move the one beside it, which is the thing the fixed geometry exists
+  // to prevent. A scale() is safe because it does not touch layout.
   function overlayStyle() {
     const style = document.createElement('style');
     style.textContent = [
@@ -359,22 +368,48 @@
       `#${OVERLAY_ID} ::-webkit-scrollbar-track{background:transparent}`,
       `#${OVERLAY_ID} button{font-family:inherit;margin:0}`,
       `#${OVERLAY_ID} button:focus-visible{outline:2px solid #8ab4f8;outline-offset:2px}`,
-      // The two action buttons.
-      `#${OVERLAY_ID} .sl-act{transition:filter .12s ease,transform .08s ease}`,
-      `#${OVERLAY_ID} .sl-act:hover{filter:brightness(1.12)}`,
-      `#${OVERLAY_ID} .sl-act:active{filter:brightness(.92);transform:translateY(1px)}`,
-      // A flow is running and clicks are being ignored, so the buttons say so
-      // rather than sitting there looking live. Last, so it beats :hover.
-      `#${OVERLAY_ID}.sl-busy .sl-act{filter:saturate(.4) brightness(.72);cursor:progress}`,
+      // Order matters below: hover, then press, then busy. All three are the
+      // same specificity, so the later rule wins — the press has to beat the
+      // hover it happens under, and a press that is being thrown away has to
+      // beat both.
+      //
+      // The press is a scale rather than a 1px nudge: on a face this size a
+      // nudge is invisible, and the point of press feedback is that the rep
+      // sees the button answer before the flow starts.
+      `#${OVERLAY_ID} .sl-act{transition:transform ${RELEASE_MS}ms ${EASE_OUT},filter ${RELEASE_MS}ms ease}`,
       `#${OVERLAY_ID} .sl-key{background:rgba(255,255,255,.17);border-radius:3px;padding:1px 4px;font-size:9px;font-weight:600;letter-spacing:.02em;white-space:nowrap}`,
       // The small square buttons on the rail. Their resting look lives here so
       // that a highlight set inline — the save nudge, the paused state — can be
       // cleared back to it with an empty string.
-      `#${OVERLAY_ID} .sl-icon{background:transparent;border:1px solid #3a3d42;color:#e8e6e1;border-radius:6px;padding:0;font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto;transition:background-color .12s ease,border-color .12s ease,transform .08s ease}`,
-      `#${OVERLAY_ID} .sl-icon:hover{background:#2f3238;border-color:#5a5e66}`,
-      `#${OVERLAY_ID} .sl-icon:active{transform:translateY(1px)}`,
-      `#${OVERLAY_ID} .sl-pill{transition:filter .12s ease}`,
-      `#${OVERLAY_ID} .sl-pill:hover{filter:brightness(1.25)}`,
+      `#${OVERLAY_ID} .sl-icon{background:transparent;border:1px solid #3a3d42;color:#e8e6e1;border-radius:6px;padding:0;font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto;transition:transform ${RELEASE_MS}ms ${EASE_OUT},background-color ${RELEASE_MS}ms ease,border-color ${RELEASE_MS}ms ease}`,
+      `#${OVERLAY_ID} .sl-pill{transition:transform ${RELEASE_MS}ms ${EASE_OUT},filter ${RELEASE_MS}ms ease}`,
+
+      // Hover is a mouse state. A touchscreen fires it on tap and then leaves
+      // it stuck on the last thing touched, so it is gated rather than global.
+      '@media (hover:hover) and (pointer:fine){' +
+        `#${OVERLAY_ID} .sl-act:hover{filter:brightness(1.12)}` +
+        `#${OVERLAY_ID} .sl-icon:hover{background:#2f3238;border-color:#5a5e66}` +
+        `#${OVERLAY_ID} .sl-pill:hover{filter:brightness(1.25)}}`,
+
+      // Press. Shorter than the release on purpose: the answer has to land as
+      // the mouse goes down, and it can take its time coming back.
+      `#${OVERLAY_ID} .sl-act:active{transform:scale(.97);filter:brightness(.94);transition-duration:${PRESS_MS}ms}`,
+      // A shade deeper on the rail, which is small enough that .97 would not
+      // register.
+      `#${OVERLAY_ID} .sl-icon:active{transform:scale(.94);transition-duration:${PRESS_MS}ms}`,
+      `#${OVERLAY_ID} .sl-pill:active{transform:scale(.96);transition-duration:${PRESS_MS}ms}`,
+
+      // A flow is running and clicks are being ignored, so the buttons say so
+      // rather than sitting there looking live — and a press that is being
+      // thrown away must not answer as though it was not.
+      `#${OVERLAY_ID}.sl-busy .sl-act{filter:saturate(.4) brightness(.72);cursor:progress}`,
+      `#${OVERLAY_ID}.sl-busy .sl-act:active{transform:none}`,
+
+      // Reduced motion is gentler, not absent: the colour still answers the
+      // press, only the movement goes. Last, so it beats every :active above.
+      '@media (prefers-reduced-motion:reduce){' +
+        `#${OVERLAY_ID} .sl-act:active,#${OVERLAY_ID} .sl-icon:active,` +
+        `#${OVERLAY_ID} .sl-pill:active{transform:none}}`,
     ].join('');
     return style;
   }
@@ -387,16 +422,22 @@
     b.className = 'sl-act';
     b.type = 'button';
     b.title = `${label} — ${keys.join(' or ')}`;
+    // The glyph and the label are one thing — what the button is — so they sit
+    // close together. The keycaps say how else to fire it, which is a note
+    // about the button rather than part of its name, so they get twice the
+    // distance. An even stack of three read as three equal lines.
     b.innerHTML =
-      `<span style="font-size:20px;line-height:1">${glyph}</span>` +
-      `<span style="font-size:13px;font-weight:600;line-height:1.15">${label}</span>` +
+      '<span style="display:flex;flex-direction:column;align-items:center;gap:4px">' +
+        `<span style="font-size:20px;line-height:1">${glyph}</span>` +
+        `<span style="font-size:13px;font-weight:600;line-height:1.15;letter-spacing:.01em">${label}</span>` +
+      '</span>' +
       `<span style="display:flex;gap:3px">${keys
         .map((k) => `<span class="sl-key">${k}</span>`)
         .join('')}</span>`;
     b.style.cssText = [
       'flex:1 1 0', 'min-width:0', 'height:100%', 'box-sizing:border-box',
       'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
-      'gap:5px', 'padding:5px 6px', 'border:none', 'border-radius:8px',
+      'gap:8px', 'padding:5px 6px', 'border:none', 'border-radius:8px',
       'cursor:pointer', 'color:#fff', `background:${background}`,
       'box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 1px 2px rgba(0,0,0,.35)',
       'text-align:center', 'font-family:inherit',
