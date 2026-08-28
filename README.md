@@ -3,7 +3,7 @@
 Make cadence calling faster. Instead of clicking End Call, picking a disposition, and hitting Log & Complete for every no-answer, you press **one key** (or click one button) and it all happens for you.
 
 <p align="center">
-  <img src="images/controls.png" alt="The two control buttons: a red No Answer button and a green Call button, with a status line reading Ready" width="400">
+  <img src="extension/images/controls.png" alt="The two control buttons: a red No Answer button and a green Call button, with a status line reading Ready" width="400">
 </p>
 
 - 🔴 **The red button** — ends the call, logs it as "No Answer," completes the cadence step, and lines up the next person.
@@ -204,10 +204,10 @@ text** pill appears to tell you more has arrived. Scroll back to the bottom, or
 click the pill, and it resumes. The buttons down the side are minimize, pause,
 copy everything, save as a text file, and clear.
 
-Minimize (**»**) folds the pane away and leaves that strip of buttons behind,
+Minimize (**«**) folds the pane away and leaves that strip of buttons behind,
 so the corner of the page is just the two dialer buttons again. Transcription
 keeps running while it's folded — the dot on the strip stays lit and nothing
-you've captured is lost — and **«** brings it back.
+you've captured is lost — and **»** brings it back.
 
 The on-page pane keeps the last few calls, one after another with a divider
 between them, so you can still look back at the previous conversation while
