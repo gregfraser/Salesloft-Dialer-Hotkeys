@@ -3,7 +3,7 @@
 Make cadence calling faster. Instead of clicking End Call, picking a disposition, and hitting Log & Complete for every no-answer, you press **one key** (or click one button) and it all happens for you.
 
 <p align="center">
-  <img src="images/controls.png" alt="The two control buttons: a red No Answer button and a green Call button, with a status line reading Ready" width="400">
+  <img src="extension/images/controls.png" alt="The two control buttons: a red No Answer button and a green Call button, with a status line reading Ready" width="400">
 </p>
 
 - 🔴 **The red button** — ends the call, logs it as "No Answer," completes the cadence step, and lines up the next person.
@@ -13,7 +13,7 @@ That's it. Dial, no answer, red, green, repeat.
 
 And before you dial, it checks the contact's page for you — if Salesloft already
 has them tagged **Meeting Scheduled**, **Interested**, or **No Interest**, a
-colour-coded toast says so.
+colour-coded alert says so, right next to the buttons.
 
 ---
 
@@ -44,7 +44,10 @@ Look in the **top-right corner** of that page for a small toggle labeled **Devel
 
 ### Step 4 — Load the extension
 
-Three new buttons will appear near the top-left. Click **Load unpacked**, then find and select the folder from Step 1 — the one with `manifest.json` inside it — and click **Select Folder**.
+Three new buttons will appear near the top-left. Click **Load unpacked**, then open the folder from Step 1 and select the **`extension`** folder inside it — the one with `manifest.json` in it — and click **Select Folder**.
+
+> [!IMPORTANT]
+> **Updating from version 1.1?** The extension files moved into an `extension` subfolder to make room for the transcription server. Chrome will not find them on its own: go to `chrome://extensions`, remove the old **Salesloft Dialer Hotkeys** card, and load it again pointing at the new `extension` folder. Your settings are kept.
 
 ### Step 5 — Pin it to your toolbar
 
@@ -52,7 +55,9 @@ Click the Extensions button (the puzzle-piece icon 🧩) to the right of Chrome'
 
 ### Step 6 — Refresh Salesloft
 
-If you already had Salesloft open, refresh that tab once. You should see the red and green buttons (pictured above) appear in the bottom-left corner of the page. You're done! 🎉
+If you already had Salesloft open, refresh that tab once. Open any person's page and you should see the red and green buttons (pictured above) appear in the bottom-left corner. You're done! 🎉
+
+> The buttons only show up where there's someone to dial — a contact's page, or any page with the call window open. You won't see them on your dashboard, a cadence, or the People list.
 
 ---
 
@@ -80,10 +85,13 @@ The status line under the buttons (it says "Ready" in the picture above) tells y
 
 Nothing kills a call faster than dialing someone who already told your teammate
 "not interested" — or who already has a meeting on the books. So the extension
-reads the Disposition and Sentiment tags already on the contact's page and pops a
-toast at the top of the screen before you dial.
+reads the Disposition and Sentiment tags already on the contact's page and shows
+a colour-coded alert before you dial — in the floating panel, and as a small
+line inside the on-page buttons. Nothing pops up over the Salesloft page itself.
 
-Each tag keeps its own colour, so you can read the situation at a glance:
+It reads the tags off the activity feed — the pills on a logged call or a booked
+meeting — as well as any labelled Disposition/Sentiment field. Each tag keeps its
+own colour, so you can read the situation at a glance:
 
 | Tag | Colour | What it means |
 |---|---|---|
@@ -91,15 +99,17 @@ Each tag keeps its own colour, so you can read the situation at a glance:
 | **Interested** | 🟢 Green | Warm. Worth a call, but not a cold one — read the notes first. |
 | **No Interest** | 🔴 Red | They've said no. Check before you dial again. |
 
+The alert shows the tag itself in its colour and nothing else — no wording of
+its own in front of it.
+
 If more than one tag is on the page, every tag still shows in its own colour, and
-the toast itself takes the colour of the most important one — blue first, then
+the alert itself takes the colour of the most important one — blue first, then
 red, then green.
 
-The toast follows whoever is on screen: it updates when you move to the next
-person in the cadence and disappears when their page is clean. Click the **✕** to
-wave it off for that contact; it comes back for the next one. If the floating
-panel is open, the same alert shows there too, so you see it without leaving the
-tab you're in.
+The alert follows whoever is on screen: it updates when you move to the next
+person in the cadence and disappears when their page is clean. The floating
+panel and the on-page buttons show the same alert, so you see it whichever one
+you work from — including from another tab.
 
 > [!NOTE]
 > This reads the page — it doesn't change anything and it never logs a call for
@@ -115,12 +125,130 @@ Click the extension's icon in your toolbar to open settings:
 | Setting | What it does |
 |---|---|
 | **Floating panel** | Puts the buttons in their own little window that you can drag anywhere — even a second monitor. It stays open while you work in other tabs. |
-| **Buttons on Salesloft page** | Shows or hides the buttons in the corner of the Salesloft page. Turn off if you're using the floating panel or just the keyboard. |
+| **Buttons on Salesloft page** | Shows or hides the buttons in the corner of a contact's page. Turn off if you're using the floating panel or just the keyboard. |
 | **Disposition** | The label the red button logs. Set to "No Answer." Only change this if your team's dropdown uses different wording — it must match the dropdown option in Salesloft **exactly**, including capitalization. |
 | **Alert on tags** | Turns the contact alerts on or off. |
 | **Tags to watch** | Which tags trigger an alert, comma separated. Starts with No Interest, Meeting Scheduled, Interested. Each one must match Salesloft's wording exactly. The coloured pills underneath show you what each tag will look like. |
-| **Only labelled fields** | On by default: only alerts on a tag that sits next to a **Disposition** or **Sentiment** label, which keeps unrelated text on the page from setting it off. Turn it off if your Salesloft layout shows these tags as bare pills and you're not seeing alerts. |
+| **Strict matching** | On by default: only counts a tag where Salesloft actually renders one — a pill on a logged call or meeting, a labelled Disposition/Sentiment field, or an activity table column. Keeps ordinary text like "we had a meeting scheduled last quarter" from setting it off. Turn it off only if your layout shows these tags somewhere unusual and you're not getting alerts. |
 | **Edit shortcuts** | Opens Chrome's shortcut settings if <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd>/<kbd>0</kbd> conflicts with something else or you'd prefer different keys. |
+| **Live transcription** | Turns the transcript on, in the floating panel and beside the on-page buttons. Transcription then starts by itself as soon as a call is detected. Transcripts are saved only when you click the ↓ button — text only, never audio, and nothing is downloaded on its own. Needs the transcription server running — see below. |
+| **Call audio output** | Which device you actually listen on. Get this wrong and the call plays somewhere you can't hear it. |
+
+
+---
+
+## Live transcription (optional)
+
+Shows you what the prospect just said, as text, while you're still on the call.
+It runs entirely on your own machine — no audio is recorded, saved, or sent
+anywhere.
+
+### One-time setup
+
+You need Python 3.10 or newer installed ([python.org](https://www.python.org/downloads/) —
+tick **Add python.exe to PATH** on the first screen of the installer).
+
+Then open the folder you downloaded and **double-click `Install.cmd`**. It takes
+a few minutes, mostly downloading the speech model so your first call isn't
+spent waiting. When it says "Setup complete", close the window.
+
+If anything goes wrong it stops and tells you what happened — the **Setup**
+section of [docs/troubleshooting.md](docs/troubleshooting.md) covers the common
+ones.
+
+### Each day
+
+**Double-click `Start Server.cmd`** before your call block and leave that window
+open. Closing it turns transcription off.
+
+Then turn on **Live transcription** in the extension settings. Click
+**Test server** to confirm the two are talking to each other.
+
+> [!TIP]
+> Tired of remembering? **Double-click `Auto-start.cmd`** and the server starts
+> by itself, minimised, every time you log in. Double-click it again to switch
+> that back off. The catch: the server keeps the speech model loaded — about a
+> gigabyte of memory — from login until you close it. That's what makes the
+> first call of the day as fast as the rest.
+
+<details>
+<summary>Prefer the command line?</summary>
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+powershell -ExecutionPolicy Bypass -File scripts\start-server.ps1
+powershell -ExecutionPolicy Bypass -File scripts\autostart.ps1 -Enable
+```
+
+The `.cmd` files do exactly this and nothing more.
+</details>
+
+### Starting it on a call
+
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>8</kbd> **while you're looking at the
+Salesloft tab**.
+
+That "while you're looking at the Salesloft tab" part matters. Chrome only lets
+the extension listen to a tab you were actually on when you pressed the key — so
+unlike the dial hotkeys, this one won't work from LinkedIn. Once it's started it
+keeps going, and you can switch tabs freely for the rest of the call.
+
+If you see **"Transcription not armed"**, that's what happened. Switch back to
+Salesloft and press it again.
+
+### Reading it
+
+The transcript shows up in two places, and you can use either: the floating
+panel, and a pane that appears beside the on-page buttons in the corner of the
+Salesloft page. Both show the same words at the same time.
+
+Scroll up to read something earlier and it stops auto-scrolling — a **↓ New
+text** pill appears to tell you more has arrived. Scroll back to the bottom, or
+click the pill, and it resumes. The buttons down the side are minimize, pause,
+copy everything, save as a text file, and clear.
+
+Minimize (**«**) folds the pane away and leaves that strip of buttons behind,
+so the corner of the page is just the two dialer buttons again. Transcription
+keeps running while it's folded — the dot on the strip stays lit and nothing
+you've captured is lost — and **»** brings it back.
+
+The on-page pane keeps the last few calls, one after another with a divider
+between them, so you can still look back at the previous conversation while
+you're dialing the next person.
+
+Nothing is saved to your computer unless you ask. When a call ends, whichever
+transcript you're using says "Transcript ready — ↓ to save" and highlights the
+save button; click it for the calls worth keeping and ignore it for the rest.
+You'd be downloading a file for every no-answer otherwise.
+
+> [!TIP]
+> Treat the transcript as an aid, not a record of truth. Phone audio is
+> compressed and speech recognition gets names, acronyms and numbers wrong more
+> often than ordinary words — which is exactly the content worth double-checking
+> before you read it back.
+
+### If something looks wrong
+
+[docs/troubleshooting.md](docs/troubleshooting.md) covers the common ones —
+can't hear the prospect, "not armed", "offline", the transcript falling behind,
+and lines appearing that were never said.
+
+---
+
+## For developers
+
+- [docs/architecture.md](docs/architecture.md) — how the pieces fit together and why
+- [docs/troubleshooting.md](docs/troubleshooting.md) — symptoms and fixes
+- [CLAUDE.md](CLAUDE.md) — working in this codebase
+
+Run the tests:
+
+```bash
+python -m pytest tests/                        # server, protocol, benchmark
+node --test tests/test_salesloft_detection.js  # Salesloft DOM detection
+node --test tests/test_pcm_worklet.js          # audio downsampling
+node --test tests/test_transcript_format.js    # shared transcript formatting
+```
 
 ---
 
@@ -129,7 +257,7 @@ Click the extension's icon in your toolbar to open settings:
 <details>
 <summary><strong>No buttons on the Salesloft page?</strong></summary>
 
-Refresh the Salesloft tab. If they still don't appear, check that **Buttons on Salesloft page** is turned on in settings (click the extension icon).
+Check you're on a person's page — the buttons stay out of the way everywhere else (your dashboard, a cadence, the People list). If you are on one, refresh the Salesloft tab, then check that **Buttons on Salesloft page** is turned on in settings (click the extension icon).
 </details>
 
 <details>
@@ -153,19 +281,23 @@ Check the **Disposition** field in settings — it must match your Salesloft dro
 <details>
 <summary><strong>Not seeing an alert on a contact you know is tagged?</strong></summary>
 
-Open settings (click the extension icon) and check two things. First, that the
-tag in **Tags to watch** matches Salesloft's wording exactly — "No Interest" and
-"Not Interested" are different text. Second, try turning **Only labelled fields**
-off: that setting requires the tag to sit next to a "Disposition" or "Sentiment"
-label, and some Salesloft layouts show these as bare pills instead.
+First make sure the version of the extension you loaded actually has this
+feature — open settings (click the extension icon) and look for a **CONTACT
+ALERTS** section. No section means you're running an older build — go to
+`chrome://extensions` and reload it, making sure you pointed Chrome at the
+**`extension`** folder (Step 4).
+
+If the section is there, check that the tag in **Tags to watch** matches
+Salesloft's wording exactly — "No Interest" and "Not Interested" are different
+text. Failing that, try turning **Strict matching** off.
 </details>
 
 <details>
 <summary><strong>Getting an alert that doesn't belong?</strong></summary>
 
-Turn **Only labelled fields** back on — that's the setting that stops ordinary
-text on the page from counting as a tag. If it's already on, narrow **Tags to
-watch** to just the tags you care about.
+Turn **Strict matching** back on — that's the setting that stops ordinary text
+on the page from counting as a tag. If it's already on, narrow **Tags to watch**
+to just the tags you care about.
 </details>
 
 <details>
@@ -182,3 +314,5 @@ The folder from Step 1 probably got moved or deleted. Put it back (or download i
 - It doesn't store your calls, contacts, or any prospect data anywhere. It just clicks the same buttons you would click, faster.
 - Contact alerts only read what's already on the page in front of you. Nothing about a contact is sent anywhere or saved.
 - The red button never logs a call without setting the disposition first — if any step fails, it stops and tells you, rather than logging something half-finished.
+- Transcription runs on your own machine. Audio is never recorded, never written to disk, and never sent over the internet — it exists in memory for a few seconds and is discarded. Transcript text is only saved when you click the save button — no call writes a file on its own.
+- If transcription breaks, it goes quiet and the call carries on. It will never interrupt you mid-conversation with a popup.
