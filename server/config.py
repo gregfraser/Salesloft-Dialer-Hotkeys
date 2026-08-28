@@ -28,7 +28,15 @@ DEFAULT_INITIAL_PROMPT = (
 class VadConfig:
     enabled: bool = True
     speech_threshold: float = 0.5
-    silence_threshold_ms: int = 500
+    # How long a pause must run before an utterance is closed. Below ~800ms
+    # this splits sentences at ordinary hesitations, and the back half then
+    # reaches Whisper as a headless fragment: with condition_on_previous_text
+    # off it has nothing to place the clause against, so it invents a
+    # grammatical head instead of transcribing one. Holding on longer costs
+    # latency and nothing else -- inference time does not scale with utterance
+    # length -- so this is ~+380ms per utterance against the 2.5s p50 target
+    # in scripts/benchmark.py, and fewer splits means fewer invocations.
+    silence_threshold_ms: int = 900
     max_utterance_seconds: float = 12.0
     # Utterances shorter than this are discarded outright. Whisper reliably
     # hallucinates on sub-second fragments, so this is a correctness guard

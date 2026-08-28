@@ -23,7 +23,7 @@ def make(**kwargs) -> Endpointer:
         sample_rate=SAMPLE_RATE,
         frame_samples=FRAME,
         speech_threshold=0.5,
-        silence_threshold_ms=500,
+        silence_threshold_ms=900,
         max_utterance_seconds=12.0,
         min_utterance_ms=250,
         pre_roll_ms=300,
@@ -67,6 +67,18 @@ def test_endpoint_waits_for_the_full_silence_threshold():
     utterances = drive(endpointer, [(0.9, 32), (0.0, 6), (0.9, 32)])
     assert utterances == []
     assert endpointer.in_speech
+
+
+def test_a_hesitation_pause_does_not_split_a_sentence():
+    # From a real call: ~700ms fell between "typically if you are" and
+    # "approve a first set of documentation". At the old 500ms threshold that
+    # closed the utterance mid-clause, and Whisper -- handed a fragment with
+    # no head and no previous-text context -- invented one. The whole sentence
+    # has to survive a hesitation this long as a single utterance.
+    endpointer = make()
+    utterances = drive(endpointer, [(0.9, 32), (0.0, 22), (0.9, 32), (0.0, 32)])
+    assert len(utterances) == 1
+    assert not endpointer.in_speech
 
 
 def test_pre_roll_is_included_so_onset_is_not_clipped():

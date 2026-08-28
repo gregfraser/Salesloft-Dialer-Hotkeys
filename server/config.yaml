@@ -29,7 +29,7 @@ transcription:
 vad:
   enabled: true
   speech_threshold: 0.5
-  silence_threshold_ms: 500
+  silence_threshold_ms: 900   # below ~800 splits sentences at hesitations
   max_utterance_seconds: 12
   min_utterance_ms: 250
   pre_roll_ms: 300
