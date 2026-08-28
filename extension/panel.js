@@ -220,10 +220,15 @@ function renderAlert({ tags = [], name = '', color = 'amber' }) {
   alertEl.style.borderColor = theme.border;
   alertEl.textContent = '';
 
-  const who = document.createElement('div');
-  who.className = 'who';
-  who.style.color = theme.text;
-  who.textContent = name ? `${name} — ${SL_HEADLINE[color]}` : SL_HEADLINE[color];
+  // Whose tags these are, when the page gave us a name. No line of our own
+  // above them: the tags say it, and the colour says how much it matters.
+  if (name) {
+    const who = document.createElement('div');
+    who.className = 'who';
+    who.style.color = theme.text;
+    who.textContent = name;
+    alertEl.appendChild(who);
+  }
 
   const list = document.createElement('div');
   list.className = 'tags';
@@ -238,7 +243,6 @@ function renderAlert({ tags = [], name = '', color = 'amber' }) {
     list.appendChild(chip);
   }
 
-  alertEl.appendChild(who);
   alertEl.appendChild(list);
   alertEl.className = 'show';
 }

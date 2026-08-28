@@ -99,9 +99,8 @@ own colour, so you can read the situation at a glance:
 | **Interested** | 🟢 Green | Warm. Worth a call, but not a cold one — read the notes first. |
 | **No Interest** | 🔴 Red | They've said no. Check before you dial again. |
 
-The alert leads with what to do rather than repeating the tag — *Don't dial —
-Meeting Scheduled*, *Read the notes first — Interested* — so the instruction and
-the reason both fit the single line the on-page banner has.
+The alert shows the tag itself in its colour and nothing else — no wording of
+its own in front of it.
 
 If more than one tag is on the page, every tag still shows in its own colour, and
 the alert itself takes the colour of the most important one — blue first, then

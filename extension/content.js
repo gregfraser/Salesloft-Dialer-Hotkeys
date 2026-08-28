@@ -318,8 +318,7 @@
     }
     const theme = (window.SL_PALETTE || {})[alert.color] ||
       { bg: '#3a3320', border: '#b8860b', text: '#ffd88a' };
-    const headline = (window.SL_HEADLINE || {})[alert.color] || 'Check before you dial';
-    const text = `${headline} — ${alert.tags.join(' • ')}`;
+    const text = alert.tags.join(' • ');
     alertEl.textContent = text;
     alertEl.title = text;   // the banner is one line; narrow, it ellipsises
     alertEl.style.background = theme.bg;
@@ -424,12 +423,12 @@
     // appears and disappears on its own (a new contact has tags or it does
     // not), and up here it costs nothing — the overlay is anchored at its foot,
     // so it grows the box upward and leaves every control where it was. It also
-    // gets the whole width, so a headline and its tags fit on one line.
+    // gets the whole width, so several tags still fit on one line.
     alertEl = document.createElement('div');
     alertEl.style.cssText = [
       'display:none', 'flex:0 0 auto', 'box-sizing:border-box',
-      // Takes the box's width without setting it: a long headline must not be
-      // what decides how wide the overlay is.
+      // Takes the box's width without setting it: a long tag must not be what
+      // decides how wide the overlay is.
       'width:0', 'min-width:100%',
       'padding:3px 8px', 'border:1px solid transparent', 'border-radius:6px',
       'font-size:11px', 'font-weight:600', 'line-height:15px',

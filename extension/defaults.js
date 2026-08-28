@@ -67,18 +67,11 @@
     amber: { bg: '#3a3320', border: '#b8860b', text: '#ffd88a' },
   };
 
-  // The line that leads the alert. The tags are rendered right beside it, so
-  // they already state the fact — this states what to do about it. Saying the
-  // fact twice ("Meeting already scheduled — Meeting Scheduled") wasted the
-  // only line the on-page banner has and pushed the tag itself out of view.
-  // Blue and red both say don't: the decision is the same either way, and the
-  // tag beside it says which kind of stop it is.
-  root.SL_HEADLINE = {
-    blue:  "Don't dial",
-    red:   "Don't dial again",
-    green: 'Read the notes first',
-    amber: 'Check before you dial',
-  };
+  // There is deliberately no headline to go with these. The alert shows the
+  // tag Salesloft already put on the contact — "No Interest" — and the colour
+  // carries the rest. Anything added in front of it either repeats the tag
+  // ("Meeting already scheduled — Meeting Scheduled") or tells the rep what to
+  // do, which is their call and not this extension's.
 
   // ---------------- Transcript formatting ----------------
   // Shared by the floating panel and the on-page transcript pane so a line
@@ -171,7 +164,6 @@
       slColorFor: root.slColorFor,
       slTopColor: root.slTopColor,
       SL_PALETTE: root.SL_PALETTE,
-      SL_HEADLINE: root.SL_HEADLINE,
     };
   }
 })(typeof self !== 'undefined' ? self : globalThis);
