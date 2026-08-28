@@ -201,8 +201,13 @@ Salesloft page. Both show the same words at the same time.
 
 Scroll up to read something earlier and it stops auto-scrolling — a **↓ New
 text** pill appears to tell you more has arrived. Scroll back to the bottom, or
-click the pill, and it resumes. The buttons are pause, copy everything, save as
-a text file, and clear.
+click the pill, and it resumes. The buttons down the side are minimize, pause,
+copy everything, save as a text file, and clear.
+
+Minimize (**»**) folds the pane away and leaves that strip of buttons behind,
+so the corner of the page is just the two dialer buttons again. Transcription
+keeps running while it's folded — the dot on the strip stays lit and nothing
+you've captured is lost — and **«** brings it back.
 
 The on-page pane keeps the last few calls, one after another with a divider
 between them, so you can still look back at the previous conversation while

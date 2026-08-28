@@ -118,9 +118,17 @@
   // ---------------- Core flows ----------------
   let busy = false;
 
+  // A flow is serialized: while one runs, hotkeys and clicks are ignored. The
+  // buttons say so rather than sitting there looking live and doing nothing —
+  // dimming only, no layout change and nothing that steals focus mid-call.
+  function setBusy(value) {
+    busy = value;
+    if (overlayEl) overlayEl.classList.toggle('sl-busy', value);
+  }
+
   async function killAndLog() {
     if (busy) return;
-    busy = true;
+    setBusy(true);
     try {
       const endBtn = buttonByText('End Call');
       if (endBtn) {
@@ -141,13 +149,13 @@
     } catch (err) {
       setStatus(`Stopped: ${err.message}. Finish manually.`, 'err');
     } finally {
-      busy = false;
+      setBusy(false);
     }
   }
 
   async function startCall() {
     if (busy) return;
-    busy = true;
+    setBusy(true);
     try {
       const callBtn = await waitFor(() => buttonByText('Call'));
       realClick(callBtn);
@@ -159,7 +167,7 @@
     } catch (err) {
       setStatus('No Call button found — is the dialer open?', 'err');
     } finally {
-      busy = false;
+      setBusy(false);
     }
   }
 
@@ -201,6 +209,9 @@
   function setStatus(msg, kind) {
     if (statusEl) {
       statusEl.textContent = msg;
+      // The element shows at most two lines (see FOOT_HEIGHT); the tooltip is
+      // where the whole of a long "Stopped: …" stays readable.
+      statusEl.title = msg;
       statusEl.style.color =
         kind === 'err' ? '#ffb4a8' : kind === 'warn' ? '#ffd88a' : kind === 'ok' ? '#a8e6b8' : '#e8e6e1';
     }
@@ -209,9 +220,25 @@
 
   // ---------------- Optional on-page overlay ----------------
   const OVERLAY_ID = 'sl-hotkey-overlay';
-  const CONTROLS_WIDTH = 240;   // the button column, unchanged whatever else is shown
+  const CONTROLS_WIDTH = 240;    // the button column, unchanged whatever else is shown
   const TRANSCRIPT_WIDTH = 300;
-  const TRANSCRIPT_HEIGHT = 152;
+  const TRANSCRIPT_HEIGHT = 152; // the scrolling list itself
+  const TRANSCRIPT_BAR = 28;     // its title bar
+  // The transcript side's whole box: bar + list + the list's 8px of padding top
+  // and bottom + the pane's own 1px borders. The controls column is given the
+  // same height, which is what balances the two sides — and, more importantly,
+  // means the buttons sit under exactly the same pixels whether the transcript
+  // is shown, switched off, or minimised.
+  const PANEL_HEIGHT = TRANSCRIPT_BAR + TRANSCRIPT_HEIGHT + 16 + 2;
+  const GAP = 8;
+  // Reserved for the contact alert and the status line. Fixed, and both of
+  // those are clamped to fit inside it (two lines each, which is what a
+  // two-tag alert and a "Stopped: … Finish manually." both need), so nothing
+  // either one says can move a button.
+  const FOOT_HEIGHT = 78;
+  const ACTION_HEIGHT = Math.round((PANEL_HEIGHT - FOOT_HEIGHT - GAP * 2) / 2);
+
+  const ACCENT = '#8ab4ff'; // focus ring only — never a resting colour
 
   let alertEl;
   let overlayEl = null; // the box this copy of the script built, if any
@@ -224,6 +251,7 @@
     entries: [],
     autoScroll: true,
     paused: false,
+    minimized: false,     // pane collapsed to its rail, by the rep's own click
     unsaved: false,       // lines added since the last save
     pendingNewCall: false, // draw a divider before the next call's first line
     startedAt: 0,
@@ -286,32 +314,125 @@
     if (!alert || !alert.tags || !alert.tags.length) {
       alertEl.style.display = 'none';
       alertEl.textContent = '';
+      alertEl.title = '';
       return;
     }
     const theme = (window.SL_PALETTE || {})[alert.color] ||
       { bg: '#3a3320', border: '#b8860b', text: '#ffd88a' };
     const headline = (window.SL_HEADLINE || {})[alert.color] || 'Heads up before you dial';
-    alertEl.textContent = `${headline} — ${alert.tags.join(' • ')}`;
+    const text = `${headline} — ${alert.tags.join(' • ')}`;
+    alertEl.textContent = text;
+    // Clamped to two lines (see FOOT_HEIGHT); the tooltip is where a longer
+    // list of tags stays readable.
+    alertEl.title = text;
     alertEl.style.background = theme.bg;
     alertEl.style.borderColor = theme.border;
     alertEl.style.color = theme.text;
-    alertEl.style.display = 'block';
+    // -webkit-box, not block: the two-line clamp is what keeps it inside the
+    // space the foot reserves for it.
+    alertEl.style.display = '-webkit-box';
   }
   window.__slOnContactAlert = renderOverlayAlert;
 
   // The only rules that cannot be expressed as inline styles. It lives inside
   // the overlay so removeOverlay() takes it with everything else, and so the
   // <style> node never lands in <head> where alerts.js would see it mutate.
+  //
+  // Every hover/active effect here is a filter or a transform — things that
+  // paint differently without changing a box — so nothing a mouse does can
+  // reflow the column.
   function overlayStyle() {
     const style = document.createElement('style');
+    const id = `#${OVERLAY_ID}`;
     style.textContent = [
       '@keyframes sl-pulse{0%,100%{opacity:1}50%{opacity:.35}}',
-      `#${OVERLAY_ID} ::-webkit-scrollbar{width:8px}`,
-      `#${OVERLAY_ID} ::-webkit-scrollbar-thumb{background:#3a3d42;border-radius:4px}`,
-      `#${OVERLAY_ID} ::-webkit-scrollbar-thumb:hover{background:#4c5057}`,
-      `#${OVERLAY_ID} ::-webkit-scrollbar-track{background:transparent}`,
+      `${id} ::-webkit-scrollbar{width:8px}`,
+      `${id} ::-webkit-scrollbar-thumb{background:#3a3d42;border-radius:4px}`,
+      `${id} ::-webkit-scrollbar-thumb:hover{background:#4c5057}`,
+      `${id} ::-webkit-scrollbar-track{background:transparent}`,
+      `${id} .sl-act{cursor:pointer;transition:filter .12s ease,transform .06s ease}`,
+      `${id} .sl-act:hover{filter:brightness(1.13)}`,
+      `${id} .sl-act:active{transform:translateY(1px);filter:brightness(.92)}`,
+      `${id} .sl-act:focus-visible{outline:2px solid ${ACCENT};outline-offset:2px}`,
+      `${id} .sl-icon{background:none;transition:background .12s ease,border-color .12s ease}`,
+      `${id} .sl-icon:hover{background:#2e3136}`,
+      `${id} .sl-icon:active{transform:translateY(1px)}`,
+      `${id} .sl-icon:focus-visible{outline:2px solid ${ACCENT};outline-offset:1px}`,
+      // A flow is running and clicks are being ignored: say so, rather than
+      // letting the buttons look live and unresponsive.
+      `${id}.sl-busy .sl-act{filter:saturate(.5) brightness(.78);cursor:progress}`,
+      `${id}.sl-busy .sl-act:hover{filter:saturate(.5) brightness(.78)}`,
     ].join('');
     return style;
+  }
+
+  // A key hint, drawn as a key. Two of them ride on each action button: the
+  // in-page F-key and the global Chrome command, which are not the same thing
+  // and are worth telling apart at a glance.
+  function keycap(label) {
+    const cap = document.createElement('kbd');
+    cap.textContent = label;
+    cap.style.cssText = [
+      'font-family:inherit', 'font-size:9px', 'font-weight:600', 'line-height:1',
+      'padding:3px 5px', 'border-radius:4px', 'white-space:nowrap',
+      'background:rgba(0,0,0,.3)', 'border:1px solid rgba(255,255,255,.2)',
+      'color:rgba(255,255,255,.92)', 'letter-spacing:.02em',
+    ].join(';');
+    return cap;
+  }
+
+  // One full-width bar: glyph, what it does, and the two ways to fire it. Its
+  // height is fixed at ACTION_HEIGHT — the pair of them plus the reserved foot
+  // is exactly the transcript's height, which is what "balanced" means here.
+  function actionButton(opts) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sl-act';
+    b.title = `${opts.label} — ${opts.keys.join(' or ')}`;
+    b.style.cssText = [
+      'width:100%', `height:${ACTION_HEIGHT}px`, 'box-sizing:border-box',
+      'display:flex', 'align-items:center', 'gap:9px', 'padding:0 10px',
+      'border-radius:9px', 'text-align:left',
+      `background:${opts.bg}`, `border:1px solid ${opts.border}`,
+      'box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 2px rgba(0,0,0,.35)',
+      'color:#fff', 'font-family:inherit',
+    ].join(';');
+
+    const glyph = document.createElement('span');
+    glyph.textContent = opts.glyph;
+    glyph.setAttribute('aria-hidden', 'true');
+    glyph.style.cssText = [
+      'flex:0 0 auto', 'width:26px', 'height:26px', 'border-radius:7px',
+      'display:flex', 'align-items:center', 'justify-content:center',
+      'background:rgba(255,255,255,.15)', 'font-size:13px', 'line-height:1',
+    ].join(';');
+
+    const text = document.createElement('span');
+    text.style.cssText = 'flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px;';
+
+    const label = document.createElement('span');
+    label.textContent = opts.label;
+    label.style.cssText = 'font-size:13px;font-weight:600;line-height:1.15;white-space:nowrap;';
+
+    const sub = document.createElement('span');
+    sub.textContent = opts.sub;
+    sub.style.cssText = [
+      'font-size:10px', 'opacity:.82', 'line-height:1.15',
+      'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
+    ].join(';');
+
+    text.appendChild(label);
+    text.appendChild(sub);
+
+    const caps = document.createElement('span');
+    caps.style.cssText = 'flex:0 0 auto;display:flex;gap:4px;';
+    for (const key of opts.keys) caps.appendChild(keycap(key));
+
+    b.appendChild(glyph);
+    b.appendChild(text);
+    b.appendChild(caps);
+    b.addEventListener('click', opts.onClick);
+    return b;
   }
 
   function buildOverlay() {
@@ -326,56 +447,88 @@
     box.style.cssText = [
       // Anchored bottom-left, and every part of it a fixed size: the buttons
       // must stay under the same pixels all day, however long the status line
-      // gets or how much the prospect says. Text wraps and scrolls; the box
-      // itself only ever changes when transcription is switched on or off.
+      // gets or how much the prospect says. Text wraps, clips and scrolls; the
+      // box itself only ever changes width, and only when the rep asks — by
+      // switching transcription on or off, or minimising the pane.
       'position:fixed', 'bottom:16px', 'left:16px', 'z-index:999999',
       'box-sizing:border-box',
       'display:flex', 'align-items:stretch', 'gap:10px',
-      'background:#1c1e21', 'border:1px solid #3a3d42', 'border-radius:10px',
+      'background:#1c1e21', 'border:1px solid #3a3d42', 'border-radius:12px',
       'padding:10px', 'font-family:system-ui,sans-serif', 'font-size:12px',
       'color:#e8e6e1',
-      'box-shadow:0 4px 16px rgba(0,0,0,.35)', 'user-select:none',
+      'box-shadow:0 6px 22px rgba(0,0,0,.45)', 'user-select:none',
     ].join(';');
     box.appendChild(overlayStyle());
+    // A rebuild mid-flow (a settings toggle while a call is being logged) must
+    // come back wearing the same dimmed, clicks-ignored look it had before.
+    if (busy) box.classList.add('sl-busy');
 
     const controls = document.createElement('div');
     controls.style.cssText = [
-      `flex:0 0 ${CONTROLS_WIDTH}px`, `width:${CONTROLS_WIDTH}px`, 'box-sizing:border-box',
-      'display:flex', 'flex-direction:column', 'gap:6px',
+      `flex:0 0 ${CONTROLS_WIDTH}px`, `width:${CONTROLS_WIDTH}px`,
+      `height:${PANEL_HEIGHT}px`, 'box-sizing:border-box',
+      'display:flex', 'flex-direction:column', `gap:${GAP}px`,
     ].join(';');
 
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:8px;';
+    row.style.cssText = `display:flex;flex-direction:column;gap:${GAP}px;flex:0 0 auto;`;
 
-    const mkBtn = (label, sub, bg, onClick) => {
-      const b = document.createElement('button');
-      b.innerHTML = `<div style="font-weight:600;font-size:13px;">${label}</div><div style="opacity:.75;font-size:10px;margin-top:2px;">${sub}</div>`;
-      b.style.cssText = `flex:1;padding:10px 14px;border:none;border-radius:8px;cursor:pointer;color:#fff;background:${bg};text-align:center;line-height:1.2;font-family:inherit;`;
-      b.addEventListener('click', onClick);
-      return b;
-    };
+    row.appendChild(actionButton({
+      glyph: '✕',
+      label: 'No Answer',
+      sub: 'End · log · next',
+      keys: [CONFIG.keyKill, 'Ctrl⇧9'],
+      bg: 'linear-gradient(180deg,#cf4436 0%,#a52f22 100%)',
+      border: '#8d2a1e',
+      onClick: killAndLog,
+    }));
+    row.appendChild(actionButton({
+      glyph: '▶',
+      label: 'Call',
+      sub: 'Dial this contact',
+      keys: [CONFIG.keyCall, 'Ctrl⇧0'],
+      bg: 'linear-gradient(180deg,#249a55 0%,#166b3b 100%)',
+      border: '#135f34',
+      onClick: startCall,
+    }));
 
-    row.appendChild(mkBtn('✕ No Answer', `${CONFIG.keyKill} / Ctrl⇧9`, '#c0392b', killAndLog));
-    row.appendChild(mkBtn('▶ Call', `${CONFIG.keyCall} / Ctrl⇧0`, '#1e7e46', startCall));
+    // A fixed block the buttons sit above, not a stack that grows under them.
+    // The alert reads directly beneath the buttons; the status stays pinned to
+    // the bottom edge, where it has been all along.
+    const foot = document.createElement('div');
+    foot.style.cssText = [
+      `flex:0 0 ${FOOT_HEIGHT}px`, `height:${FOOT_HEIGHT}px`, 'box-sizing:border-box',
+      'display:flex', 'flex-direction:column', 'gap:6px', 'overflow:hidden',
+    ].join(';');
 
     alertEl = document.createElement('div');
     alertEl.style.cssText = [
-      'display:none', 'padding:4px 8px', 'border:1px solid', 'border-radius:6px',
-      'font-size:11px', 'font-weight:600', 'line-height:1.35', 'overflow-wrap:break-word',
+      'flex:0 0 auto', 'padding:4px 8px', 'border:1px solid',
+      'border-radius:6px', 'font-size:11px', 'font-weight:600', 'line-height:1.35',
+      'overflow-wrap:break-word',
+      // Two lines is a headline plus two tags; a third tag ellipses and the
+      // tooltip carries the rest. It must not be able to grow the column.
+      'display:-webkit-box', '-webkit-box-orient:vertical', '-webkit-line-clamp:2',
+      'overflow:hidden',
     ].join(';');
+    alertEl.style.display = 'none';
 
     statusEl = document.createElement('div');
-    // margin-top:auto settles it against the bottom of the column, so with the
-    // transcript alongside it lines up with the foot of the pane instead of
-    // floating in the middle. With no transcript there is no slack and it sits
-    // under the buttons as before.
-    statusEl.style.cssText =
-      'margin-top:auto;min-height:14px;color:#e8e6e1;overflow-wrap:break-word;';
+    statusEl.style.cssText = [
+      'flex:0 0 auto', 'margin-top:auto', 'min-height:14px', 'color:#e8e6e1',
+      'font-size:12px', 'line-height:1.35', 'overflow-wrap:break-word',
+      // Same deal: two lines, then ellipsis, with the whole of a long
+      // "Stopped: … Finish manually." on the tooltip.
+      'display:-webkit-box', '-webkit-box-orient:vertical', '-webkit-line-clamp:2',
+      'overflow:hidden',
+    ].join(';');
     statusEl.textContent = 'Ready';
 
+    foot.appendChild(alertEl);
+    foot.appendChild(statusEl);
+
     controls.appendChild(row);
-    controls.appendChild(alertEl);
-    controls.appendChild(statusEl);
+    controls.appendChild(foot);
     box.appendChild(controls);
 
     if (settings.transcription) box.appendChild(buildTranscript());
@@ -396,11 +549,13 @@
 
   function iconButton(glyph, title, onClick) {
     const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sl-icon';
     b.textContent = glyph;
     b.title = title;
     b.setAttribute('aria-label', title);
     b.style.cssText = [
-      'background:none', 'border:1px solid #3a3d42', 'color:#e8e6e1',
+      'border:1px solid #3a3d42', 'color:#e8e6e1',
       'border-radius:6px', 'padding:0', 'width:26px', 'height:24px',
       'font-size:11px', 'line-height:1', 'cursor:pointer', 'font-family:inherit',
       'flex:0 0 auto',
@@ -416,20 +571,22 @@
 
   function buildTranscript() {
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;gap:6px;align-items:stretch;';
+    wrap.style.cssText = 'display:flex;gap:6px;align-items:stretch;flex:0 0 auto;';
 
     const pane = document.createElement('div');
     pane.style.cssText = [
       'position:relative', `flex:0 0 ${TRANSCRIPT_WIDTH}px`, `width:${TRANSCRIPT_WIDTH}px`,
-      'box-sizing:border-box', 'display:flex', 'flex-direction:column',
+      `height:${PANEL_HEIGHT}px`, 'box-sizing:border-box',
+      'display:flex', 'flex-direction:column',
       'background:#141618', 'border:1px solid #3a3d42', 'border-radius:8px',
       'overflow:hidden',
     ].join(';');
 
     const bar = document.createElement('div');
     bar.style.cssText = [
-      'display:flex', 'align-items:center', 'gap:7px', 'padding:5px 8px',
-      'background:#26282c', 'border-bottom:1px solid #3a3d42', 'flex:0 0 auto',
+      'display:flex', 'align-items:center', 'gap:7px', 'padding:0 8px',
+      `flex:0 0 ${TRANSCRIPT_BAR}px`, `height:${TRANSCRIPT_BAR}px`, 'box-sizing:border-box',
+      'background:#26282c', 'border-bottom:1px solid #3a3d42',
     ].join(';');
 
     const dot = document.createElement('span');
@@ -462,6 +619,7 @@
     list.appendChild(empty);
 
     const hint = document.createElement('button');
+    hint.type = 'button';
     hint.textContent = '↓ New text';
     hint.style.cssText = [
       'display:none', 'position:absolute', 'right:10px', 'bottom:8px',
@@ -487,13 +645,27 @@
     pane.appendChild(list);
     pane.appendChild(hint);
 
+    // The rail stays whatever the pane does, so minimising cannot strand the
+    // controls that act on the transcript — save and copy still reach every
+    // line that was captured.
     const rail = document.createElement('div');
     rail.style.cssText = 'display:flex;flex-direction:column;gap:5px;flex:0 0 auto;';
+    const toggle = iconButton('»', 'Minimize transcript', toggleMinimized);
+    // Only shown while minimised, where the bar's own indicator is not on
+    // screen: capture is still running and the rep should still be able to see
+    // that at a glance.
+    const railDot = document.createElement('span');
+    railDot.style.cssText = [
+      'display:none', 'width:8px', 'height:8px', 'border-radius:50%',
+      'background:#6b6f76', 'flex:0 0 auto', 'align-self:center', 'margin:2px 0',
+    ].join(';');
     const pause = iconButton('⏸', 'Pause transcription', togglePause);
     const save = iconButton('↓', 'Save transcript as text', () => {
       if (saveTranscript()) setStatus('Transcript saved', 'ok');
       else setStatus('Nothing to save');
     });
+    rail.appendChild(toggle);
+    rail.appendChild(railDot);
     rail.appendChild(pause);
     rail.appendChild(iconButton('⧉', 'Copy transcript', copyTranscript));
     rail.appendChild(save);
@@ -502,7 +674,7 @@
     wrap.appendChild(pane);
     wrap.appendChild(rail);
 
-    tx = { list, empty, dot, connection, timer, hint, pause, save };
+    tx = { pane, list, empty, dot, connection, timer, hint, toggle, railDot, pause, save };
     // A rebuild (settings toggle, or replacing a stale overlay) must not lose
     // what is already on screen.
     const shown = txView.entries.slice(-MAX_RENDERED_LINES);
@@ -512,7 +684,35 @@
       for (const entry of shown) appendEntryNode(entry);
     }
     renderPaused();
+    renderMinimized();
     return wrap;
+  }
+
+  // Minimising hides the pane and leaves the rail: the overlay loses the
+  // transcript's 300px of width and keeps its height, and because the box is
+  // anchored bottom-left, not one button moves. Transcription itself is
+  // untouched — lines keep arriving and keep being kept.
+  function renderMinimized() {
+    if (!tx) return;
+    const min = txView.minimized;
+    tx.pane.style.display = min ? 'none' : 'flex';
+    tx.railDot.style.display = min ? 'block' : 'none';
+    tx.toggle.textContent = min ? '«' : '»';
+    tx.toggle.title = min ? 'Show transcript' : 'Minimize transcript';
+    tx.toggle.setAttribute('aria-label', tx.toggle.title);
+    tx.toggle.setAttribute('aria-expanded', String(!min));
+    if (!min) {
+      // Nothing scrolls while display:none, so coming back always lands on the
+      // newest line rather than wherever the view was left.
+      txView.autoScroll = true;
+      tx.list.scrollTop = tx.list.scrollHeight;
+      tx.hint.style.display = 'none';
+    }
+  }
+
+  function toggleMinimized() {
+    txView.minimized = !txView.minimized;
+    renderMinimized();
   }
 
   function appendEntryNode(entry) {
@@ -593,13 +793,21 @@
     tx.connection.style.color = live ? '#e8e6e1' : '#9aa0a6';
     tx.dot.style.background = colors[state] || '#6b6f76';
     tx.dot.style.animation = live ? 'sl-pulse 1.6s ease-in-out infinite' : 'none';
+    // Same state, on the one indicator that survives minimising.
+    tx.railDot.style.background = tx.dot.style.background;
+    tx.railDot.style.animation = tx.dot.style.animation;
+    tx.railDot.title = `Transcription: ${tx.connection.textContent}`;
   }
 
   function renderPaused() {
     if (!tx) return;
     tx.pause.textContent = txView.paused ? '▶' : '⏸';
     tx.pause.title = txView.paused ? 'Resume transcription' : 'Pause transcription';
-    tx.pause.style.background = txView.paused ? '#3a3d42' : 'none';
+    tx.pause.setAttribute('aria-label', tx.pause.title);
+    // '' rather than 'none': an inline value would beat the stylesheet's
+    // resting/hover rules for this one button.
+    tx.pause.style.background = txView.paused ? '#3a3d42' : '';
+    tx.pause.setAttribute('aria-pressed', String(txView.paused));
   }
 
   function togglePause() {
