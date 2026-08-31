@@ -194,7 +194,17 @@ When Salesloft ships UI changes, these are what break.
   one-line strip **below** that row — a sentence reads better across the plate than down 214px — and it
   ellipsises with the whole of a long "Stopped: …" in the tooltip, which is what stops it resizing
   anything (`width:0;min-width:100%` keeps a long line from deciding the plate's width). With
-  transcription off the timer moves into the free end of that strip, the only thing a call changes there.
+  transcription off the timer moves into the free end of that strip.
+- **The status strip is the one place two paths write, so the order between them is fixed.** The click
+  path owns it — a flow's "Ending call…" and its "Stopped: … Finish manually." are the rep's only
+  account of a call that may now be half-logged. The detection path adds `setCallLive()`: the dot goes
+  green and the line reads "Connected" while `call-detect` sees a call, which is what the climbing timer
+  beside it had been asserting wordlessly. It is guarded on `busy` for exactly that reason, so it can
+  never overwrite a flow mid-way. `buildOverlay()` re-applies the same state directly rather than through
+  `setCallLive()` — an overlay rebuilt mid-call (a settings toggle, a stale copy being replaced) must
+  open on "Connected" rather than "Ready", but a rebuild is not news and must not re-announce to the
+  panel. The panel mirrors the dot off the `call-state` message it already handles, and takes the text as
+  an ordinary relayed status.
 - **The contact tag is the one thing allowed to move the layout, and that is deliberate.** It holds
   **no** space until the page scan reports one, then springs the plate open (`slSlot`, a lazily measured
   `scrollHeight` with a negative margin cancelling the stack gap while closed). This reverses the older

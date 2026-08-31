@@ -21,6 +21,7 @@
       --soft: #c9c6c0;
       --muted: #9aa0a6;
       --dim: #6b6f76;
+      --call-live: #5fc98d;
       --ok: #a8e6b8;
       --warn: #ffd88a;
       --err: #ffb4a8;
@@ -111,6 +112,9 @@
       padding-inline-start: 2px;
     }
     .status-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--dim); flex: 0 0 auto; }
+    /* Green while the call is up. Not the transcript light's red: that one
+       means "recording", this one means "connected", and the panel shows both. */
+    .status-dot.live { background: var(--call-live); }
     #status {
       flex: 1 1 auto;
       min-width: 0;

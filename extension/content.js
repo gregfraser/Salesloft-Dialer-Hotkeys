@@ -264,6 +264,16 @@
     safeSend({ type: 'status', msg, kind });
   }
 
+  // The plate has always started the call timer the moment call-detect sees a
+  // call, so the number climbed with no word beside it. This is that word.
+  // It is the detection path talking, so it only ever adds: a flow that is
+  // part-way through logging owns the status line (busy), and a
+  // "Stopped: ... Finish manually." has to outlive the call it is about.
+  function setCallLive(live) {
+    if (statusDot) statusDot.style.background = live ? CALL_LIVE : FG_DIM;
+    if (live && !busy) setStatus('Connected');
+  }
+
   // ---------------- Optional on-page overlay ----------------
   const OVERLAY_ID = 'sl-hotkey-overlay';
 
@@ -338,6 +348,10 @@
   const FG_SOFT = '#c9c6c0';
   const FG_MUTED = '#9aa0a6';
   const FG_DIM = '#6b6f76';
+  // The status dot while a call is up. Green, not the pane's recording red:
+  // that one means "we are transcribing", this one means "the call is
+  // connected", and both can be true at once.
+  const CALL_LIVE = '#5fc98d';
 
   // Press and release are springs now (spring.js), not transitions — a thrown
   // drag has to hand its release velocity to whatever carries it to rest, and
@@ -873,9 +887,19 @@
     statusRow.appendChild(statusDot);
     statusRow.appendChild(statusEl);
 
+    // An overlay is not always built before the call it belongs to: toggling
+    // transcription rebuilds it, and a stale copy left by an extension reload
+    // is replaced the next time the page re-renders. So it opens on the state
+    // the page is actually in. Set here rather than through setCallLive()
+    // because that one announces to the panel, and a rebuild is not news.
+    if (lastCallState === 'IN_CALL') {
+      statusEl.textContent = 'Connected';
+      statusDot.style.background = CALL_LIVE;
+    }
+
     // With no pane there is nowhere else for the call timer to live, so it
-    // takes the free end of the status line — the only thing a call changes on
-    // a plate with transcription off.
+    // takes the free end of the status line, opposite the word the dot and
+    // setCallLive() put at the other end.
     if (!hasTranscript) {
       timerEl = document.createElement('span');
       timerEl.style.cssText = [
@@ -1365,6 +1389,7 @@
     if (result.state === lastCallState) return;
     lastCallState = result.state;
     safeSend({ type: 'call-state', state: result.state, tier: result.tier });
+    setCallLive(result.state === 'IN_CALL');
 
     // The transcript pane follows the call it is transcribing. This is still
     // observation only — nothing below clicks anything.

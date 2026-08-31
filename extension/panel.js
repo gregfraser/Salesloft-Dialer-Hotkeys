@@ -327,6 +327,11 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'transcript-unsaved') offerSave();
 
   if (msg.type === 'call-state') {
+    // The same light the on-page plate shows, for the rep working from the
+    // panel on a second monitor. The status text arrives on its own, relayed
+    // from the page as an ordinary status message.
+    const dot = document.querySelector('.status-dot');
+    if (dot) dot.classList.toggle('live', msg.state === 'IN_CALL');
     if (msg.state === 'IN_CALL') {
       startTimer();
       const empty = document.getElementById('empty');
