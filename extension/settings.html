@@ -74,6 +74,41 @@
       font-size: 11px; line-height: 1.45; color: #c9c6c0; text-wrap: pretty;
     }
     .notice strong { color: #e8e6e1; }
+    .notice p { margin: 0 0 6px; }
+    .notice p:last-child { margin-bottom: 0; }
+
+    /* key bindings — the field is a button that records the next key pressed */
+    .keys { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    button.key {
+      min-width: 88px; max-width: 132px; padding: 5px 8px;
+      border: 1px solid #3a3d42; border-radius: 6px;
+      background: #26282c; color: #e8e6e1;
+      font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    button.key:hover { border-color: #5a5e66; }
+    button.key.unset { color: #9aa0a6; font-weight: 400; }
+    /* Amber, the same colour every "waiting on you" state in this extension
+       uses, and the only thing on screen that is asking for something. */
+    button.key.recording {
+      border-color: #b8860b; background: #3a3320; color: #ffd88a; font-weight: 400;
+    }
+    button.key-clear {
+      width: 22px; height: 22px; padding: 0; flex-shrink: 0;
+      border: 1px solid #3a3d42; border-radius: 6px;
+      background: none; color: #9aa0a6; font-size: 11px; line-height: 1; cursor: pointer;
+    }
+    button.key-clear:hover { border-color: #5a5e66; color: #e8e6e1; }
+    /* Below the rows, so a note can never move the key the rep just clicked.
+       The reserve is for what is under it: two lines covers every message
+       here, so the notice does not jump when one appears. */
+    #keybind-note {
+      font-size: 11px; line-height: 1.4; color: #9aa0a6;
+      min-height: 30px; margin-top: 6px; text-wrap: pretty;
+    }
+    #chrome-shortcuts { margin: 6px 0 0; padding-inline-start: 15px; }
+    #chrome-shortcuts li { margin-top: 3px; }
+    #chrome-shortcuts .unset { color: #9aa0a6; }
     .footer { margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .footer button {
       background: none; border: 1px solid #3a3d42; color: #e8e6e1;
@@ -118,6 +153,46 @@
       <span class="hint">Must match dropdown text exactly</span>
     </div>
     <input type="text" id="disposition" />
+  </div>
+
+  <h2>Key bindings</h2>
+
+  <div class="setting">
+    <div class="name">
+      End call &amp; log
+      <span class="hint">The red ✕ button</span>
+    </div>
+    <div class="keys">
+      <button class="key" data-record="kill-and-log"></button>
+      <button class="key-clear" data-clear="kill-and-log" title="Clear this key">✕</button>
+    </div>
+  </div>
+
+  <div class="setting">
+    <div class="name">
+      Start the next call
+      <span class="hint">The green ▶ button</span>
+    </div>
+    <div class="keys">
+      <button class="key" data-record="start-call"></button>
+      <button class="key-clear" data-clear="start-call" title="Clear this key">✕</button>
+    </div>
+  </div>
+
+  <div id="keybind-note"></div>
+
+  <div class="notice">
+    <p>
+      Click a key, then press the one you want — <strong>any key, number pad
+      included</strong>. These work on the Salesloft page and in the floating
+      panel, and are ignored while you are typing in a field.
+    </p>
+    <p>
+      To dial from another tab, Chrome runs the same two jobs from its own
+      shortcuts. Chrome will not take a number pad key there, and it leaves a
+      shortcut unset when something else already uses it:
+    </p>
+    <ul id="chrome-shortcuts"></ul>
   </div>
 
   <h2>Contact alerts</h2>
@@ -187,7 +262,7 @@
   </div>
 
   <div class="footer">
-    <button id="shortcuts">Edit shortcuts</button>
+    <button id="shortcuts">Chrome shortcuts</button>
     <button id="test-server">Test server</button>
     <span id="saved">Saved ✓</span>
   </div>

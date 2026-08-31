@@ -1,6 +1,6 @@
 // Salesloft Dialer Hotkeys — background service worker
 // Responsibilities:
-//  1. Relay keyboard commands (Ctrl+Shift+9/0) to the Salesloft tab from anywhere.
+//  1. Relay Chrome's keyboard commands to the Salesloft tab from anywhere.
 //  2. Open/close the floating control panel window based on the setting.
 //  3. Broadcast status updates from the content script to the panel.
 //  4. Own the transcription state machine, capture arming and the offscreen
@@ -324,6 +324,23 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 // Messages from the panel, settings, content script and offscreen document.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return false;
+
+  // What Chrome has actually assigned right now. The manifest's suggested keys
+  // are only suggestions — Chrome leaves a command unassigned when the key is
+  // already taken, and the rep can reassign any of them — so the buttons read
+  // this back rather than printing what the manifest asked for. Content scripts
+  // have no chrome.commands, which is the only reason it is answered here.
+  if (msg.type === 'command-keys') {
+    chrome.commands
+      .getAll()
+      .then((commands) => {
+        const keys = {};
+        for (const command of commands) keys[command.name] = command.shortcut || '';
+        sendResponse({ keys });
+      })
+      .catch(() => sendResponse({ keys: {} }));
+    return true; // answered asynchronously
+  }
 
   if (msg.type === 'dialer-action') sendToSalesloft(msg.action);
   if (msg.type === 'status') broadcastStatus(msg.msg, msg.kind); // forward content → panel

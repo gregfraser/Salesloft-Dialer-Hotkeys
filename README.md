@@ -9,7 +9,8 @@ Make cadence calling faster. Instead of clicking End Call, picking a disposition
 - 🔴 **The red button** — ends the call, logs it as "No Answer," completes the cadence step, and lines up the next person.
 - 🟢 **The green button** — starts the next call.
 
-That's it. Dial, no answer, red, green, repeat.
+That's it. Dial, no answer, red, green, repeat. Pick whichever keys suit you —
+the number pad included — and the buttons show what you picked.
 
 And before you dial, it checks the contact's page for you — if Salesloft already
 has them tagged **Meeting Scheduled**, **Interested**, or **No Interest**, a
@@ -67,14 +68,47 @@ Open Salesloft and start your cadence like normal. Then:
 
 | You want to... | Press | Or click |
 |---|---|---|
-| Start the next call | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>0</kbd> (Mac: <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>0</kbd>) | 🟢 **▶ Call** |
-| End the call, log "No Answer," move on | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd> (Mac: <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd>) | 🔴 **✕ No Answer** |
+| Start the next call | <kbd>F9</kbd> | 🟢 **▶ Call** |
+| End the call, log "No Answer," move on | <kbd>F8</kbd> | 🔴 **✕ No Answer** |
 
-The keyboard shortcuts work **even when you're in a different tab** — reading a prospect's LinkedIn, checking ZoomInfo, whatever. The extension finds your Salesloft tab and does the work there.
+<kbd>F8</kbd> and <kbd>F9</kbd> are just where it starts — **you can change them to
+any key you like, including the number pad.** Most reps end up on the pad, one
+hand on it all day: see [Choosing your keys](#choosing-your-keys) below.
 
-If you're actually on the Salesloft tab, <kbd>F8</kbd> (red) and <kbd>F9</kbd> (green) also work as quick single-key versions.
+The buttons show the keys that are actually set, so you never have to remember
+which is which — whatever you bind is printed right on them.
 
 The status line under the buttons (it says "Ready" in the picture above) tells you what's happening at each step — "Ending call…", "Logged No Answer ✓".
+
+---
+
+## Choosing your keys
+
+Click the extension icon in your toolbar and look under **KEY BINDINGS**. Click
+the key next to an action, press the key you want, and that's it — it saves
+straight away.
+
+| | |
+|---|---|
+| **Any key works** | <kbd>F8</kbd>, <kbd>Num 1</kbd>, <kbd>Num +</kbd>, <kbd>Ctrl</kbd>+<kbd>K</kbd> — whatever your hand already rests on. Num Lock doesn't matter. |
+| **Where they work** | On the Salesloft page, and in the floating panel if you use one. |
+| **When they don't** | While you're typing in a box — so taking notes mid-call never dials anybody. |
+| **Two keys, two jobs** | Give one action a key that already belongs to the other and it moves across; the row it came from shows "Not set" so you can see it went. |
+| **Clearing one** | The small ✕ next to it. The button and Chrome's shortcut still work. |
+
+### Dialing from another tab
+
+Reading a prospect's LinkedIn or checking ZoomInfo? Chrome can run the same two
+jobs from anywhere, using shortcuts of its own — by default
+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd> (red) and
+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>0</kbd> (green). The extension finds your
+Salesloft tab and does the work there.
+
+Those are Chrome's, not the extension's, and Chrome has rules about them: no
+number pad, and if another extension already uses the combination Chrome quietly
+leaves it **unset**. The settings popup lists what Chrome actually has right
+now, and the **Chrome shortcuts** button at the bottom opens the page where you
+can change them.
 
 > [!TIP]
 > Only use the red button for no-answers. If someone picks up, talk like normal and log that call yourself.
@@ -130,7 +164,8 @@ Click the extension's icon in your toolbar to open settings:
 | **Alert on tags** | Turns the contact alerts on or off. |
 | **Tags to watch** | Which tags trigger an alert, comma separated. Starts with No Interest, Meeting Scheduled, Interested. Each one must match Salesloft's wording exactly. The coloured pills underneath show you what each tag will look like. |
 | **Strict matching** | On by default: only counts a tag where Salesloft actually renders one — a pill on a logged call or meeting, a labelled Disposition/Sentiment field, or an activity table column. Keeps ordinary text like "we had a meeting scheduled last quarter" from setting it off. Turn it off only if your layout shows these tags somewhere unusual and you're not getting alerts. |
-| **Edit shortcuts** | Opens Chrome's shortcut settings if <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd>/<kbd>0</kbd> conflicts with something else or you'd prefer different keys. |
+| **Key bindings** | The key for each button — press the one you want, number pad included. See [Choosing your keys](#choosing-your-keys). |
+| **Chrome shortcuts** | Opens Chrome's own shortcut page, for the combinations that work from another tab. |
 | **Live transcription** | Turns the transcript on, in the floating panel and beside the on-page buttons. Transcription then starts by itself as soon as a call is detected. Transcripts are saved only when you click the ↓ button — text only, never audio, and nothing is downloaded on its own. Needs the transcription server running — see below. |
 | **Call audio output** | Which device you actually listen on. Get this wrong and the call plays somewhere you can't hear it. |
 
@@ -190,8 +225,12 @@ Salesloft tab**.
 
 That "while you're looking at the Salesloft tab" part matters. Chrome only lets
 the extension listen to a tab you were actually on when you pressed the key — so
-unlike the dial hotkeys, this one won't work from LinkedIn. Once it's started it
-keeps going, and you can switch tabs freely for the rest of the call.
+unlike Chrome's dial shortcuts, this one won't work from LinkedIn. Once it's
+started it keeps going, and you can switch tabs freely for the rest of the call.
+
+This one has to be a Chrome shortcut for the same reason, so it can't be a
+number pad key and Chrome may have left it unset. The settings popup lists what
+Chrome actually has.
 
 If you see **"Transcription not armed"**, that's what happened. Switch back to
 Salesloft and press it again.
@@ -261,9 +300,15 @@ Check you're on a person's page — the buttons stay out of the way everywhere e
 </details>
 
 <details>
-<summary><strong>Pressed the shortcut and nothing happened?</strong></summary>
+<summary><strong>Pressed the key and nothing happened?</strong></summary>
 
 Make sure a Salesloft tab is actually open in Chrome. Then refresh that tab once and try again.
+
+If it's a key you set yourself, check the button: whatever is bound is printed
+right on it. Blank means that action has no key. Remember those work on the
+Salesloft page and in the floating panel — from another tab it's Chrome's
+shortcut that does it, and Chrome leaves a shortcut unset when another extension
+already uses that combination. The settings popup lists what Chrome has.
 </details>
 
 <details>

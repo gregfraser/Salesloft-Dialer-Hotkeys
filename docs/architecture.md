@@ -93,13 +93,19 @@ triggering calls from any tab:
 
 | Input path | Can start capture of the Salesloft tab? |
 |---|---|
-| `Ctrl+Shift+8` / `Ctrl+Shift+0` with Salesloft in front | Yes |
-| Same hotkey from LinkedIn or ZoomInfo | **No** — it authorises *that* tab |
-| F8 / F9 in-page hotkeys | No — page key events are not invocations |
+| A `chrome.commands` shortcut with Salesloft in front | Yes |
+| The same shortcut from LinkedIn or ZoomInfo | **No** — it authorises *that* tab |
+| The rep's own key bindings, in the page | No — page key events are not invocations |
+| The rep's own key bindings, in the floating panel | No — extension-page events |
 | On-page overlay buttons | No — page events |
 | Floating panel buttons | No — extension-page events |
 | Salesloft's own Call button | No |
 | Opening the toolbar popup | Yes, for the active tab |
+
+This is also why the rep's own bindings cover the two dialer actions and not
+transcription: a page keypress could stop capture but could never reliably start
+it, so binding one would buy a key that fails with "not armed" about half the
+time it is pressed.
 
 So the rep must invoke the extension once while Salesloft is in front. After
 that the `MediaStream` persists across tab switches for the rest of the call, so
