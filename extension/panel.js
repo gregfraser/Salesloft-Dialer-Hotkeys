@@ -42,6 +42,13 @@ for (const button of actionButtons) {
   button.addEventListener('click', () => send(button.dataset.action));
 }
 
+// The press, on the same spring the on-page plate uses, so a button answers
+// identically whichever surface the rep is looking at. Springs write an inline
+// transform, which is why panel.html transitions colour only.
+for (const button of [...actionButtons, els.pause, els.copy, els.save, els.clear, els.scrollHint]) {
+  if (button) self.slPressable(button);
+}
+
 // Anything the panel has to say replaces the opening line, so the opening line
 // is only rewritten while it is still the opening line.
 let statusPristine = true;

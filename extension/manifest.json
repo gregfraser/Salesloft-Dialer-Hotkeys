@@ -28,7 +28,7 @@
   "content_scripts": [
     {
       "matches": ["https://app.salesloft.com/*"],
-      "js": ["defaults.js", "call-detect.js", "content.js", "alerts.js"],
+      "js": ["defaults.js", "spring.js", "call-detect.js", "content.js", "alerts.js"],
       "run_at": "document_idle"
     }
   ],
