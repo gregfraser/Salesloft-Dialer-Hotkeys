@@ -43,7 +43,7 @@
     .row button { user-select: none; }
     .row button:active { transform: scale(0.97); }
     .label { font-weight: 600; font-size: 14px; }
-    .sub { opacity: 0.75; font-size: 11px; margin-top: 3px; }
+    .sub { opacity: 0.75; font-size: 11px; margin-top: 3px; min-height: 14px; }
     #kill { background: #c0392b; }
     #call { background: #1e7e46; }
 
@@ -142,17 +142,19 @@
   </style>
 </head>
 <body>
+  <!-- The sub-lines are filled in from the keys that are actually bound: the
+       rep's own binding, and whatever Chrome has for the same command. -->
   <div class="row">
-    <button id="kill">
+    <button id="kill" data-action="kill-and-log">
       <div class="label">✕ No Answer</div>
-      <div class="sub">Ctrl+Shift+9</div>
+      <div class="sub"></div>
     </button>
-    <button id="call">
+    <button id="call" data-action="start-call">
       <div class="label">▶ Call</div>
-      <div class="sub">Ctrl+Shift+0</div>
+      <div class="sub"></div>
     </button>
   </div>
-  <div id="status">Ready — shortcuts work from anywhere</div>
+  <div id="status">Ready</div>
   <div id="alert"></div>
 
   <section id="transcription">

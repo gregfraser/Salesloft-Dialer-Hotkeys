@@ -24,12 +24,15 @@ docs/        architecture, troubleshooting
 There is no build step or linter. Tests exist and are fast:
 
 ```bash
-python -m pytest tests/                        # 92 tests: VAD, queue, protocol, session, benchmark
+python -m pytest tests/                        # 93 tests: VAD, queue, protocol, session, benchmark
 python -m pytest tests/test_vad_endpointing.py # a single file
 python -m pytest tests/ -k merges -q            # a single test by name
 node --test tests/test_salesloft_detection.js  # DOM detection (21)
+node --test tests/test_hotkeys.js              # key bindings: record, match, label (19)
 node --test tests/test_pcm_worklet.js          # audio downsampling (14)
 node --test tests/test_transcript_format.js    # shared transcript formatting (10)
+node --test tests/test_contact_page.js         # which routes are a contact (8)
+node --test tests/test_contact_alert.js        # tag matching (6)
 ```
 
 `node --test tests/` does **not** work — the directory is named `tests` and the files use underscores, so neither matches Node's default discovery patterns. Name the file explicitly.
@@ -76,8 +79,8 @@ gone while `python -m pip` still works.
 Manual, against the live Salesloft app:
 
 1. `chrome://extensions` → Developer mode → **Load unpacked** → select `extension/`.
-2. After editing `background.js`, `manifest.json`, `defaults.js` or `call-detect.js`: reload the extension card.
-3. After editing `content.js` or `alerts.js`: reload the extension **and** refresh the `app.salesloft.com` tab.
+2. After editing `background.js`, `manifest.json` or `call-detect.js`: reload the extension card.
+3. After editing `content.js`, `alerts.js` or `defaults.js`: reload the extension **and** refresh the `app.salesloft.com` tab — `defaults.js` is a content script too, so the page keeps running the old copy until it reloads.
 4. After editing `offscreen.js` or `pcm-worklet.js`: reload the extension and restart capture (`Ctrl+Shift+8` twice) — the offscreen document is only recreated on the next capture.
 5. After editing `panel.*` or `settings.*`: close and reopen that window/popup.
 
@@ -96,7 +99,7 @@ Four execution contexts in Chrome plus one Python process. Understanding any fea
 
 ### Settings
 
-`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `disposition`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `outputDeviceId`, `serverUrl`, `healthUrl`). With `transcription` on, auto-start is unconditional — it is a behaviour, not a setting. `transcription` also decides whether the on-page overlay carries the transcript pane, so toggling it rebuilds the overlay.
+`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `disposition`, `hotkeys`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `outputDeviceId`, `serverUrl`, `healthUrl`). With `transcription` on, auto-start is unconditional — it is a behaviour, not a setting. `transcription` also decides whether the on-page overlay carries the transcript pane, so toggling it rebuilds the overlay.
 
 **No transcript is ever downloaded automatically.** A cadence is dozens of dials and almost none of them are worth a file, so a save happens only from a click on a ↓ button. Both UIs enforce this; a "save it for them" convenience is the thing not to add back. Chrome independently forbids it on the page side anyway — a web page gets one uninvited download before Chrome starts asking the user's permission for the rest, so an automatic per-call save from `content.js` would put a permission bubble on the Salesloft page partway through a call block.
 
@@ -106,9 +109,46 @@ What *is* automatic is the offer. `stopTranscription()` waits for the server to 
 
 Nothing sends messages about settings changes: the background and content script each react to `chrome.storage.onChanged`.
 
+### Key bindings
+
+**There are two layers and neither replaces the other.** `chrome.commands` is
+the only way to fire an action from another tab, and its picker takes a Ctrl or
+Alt combination and nothing else — no number pad, which is where a rep working a
+cadence keeps a hand — and it silently leaves a command unassigned when the
+suggested key is already taken by something else installed. So the extension
+also keeps its own bindings (`hotkeys` in storage, `kill-and-log` and
+`start-call`) and listens for them itself, in `content.js` and `panel.js` — the
+only two places a key event reaches this extension at all. Both routes end at
+the same two functions.
+
+**A binding is `e.code`, not `e.key`**, canonicalised by `slHotkeyFromEvent()`
+in `defaults.js` as `Ctrl+Alt+Shift+Meta+<code>` with the modifiers always in
+that order. The pad's 1 and the 1 above the letters are both `'1'` to `key`, and
+with Num Lock off that same key reads `'End'` — the code is the physical key, so
+a number pad binding survives Num Lock either way. Recording and matching both
+go through that one function, so a press cannot canonicalise differently from
+the binding it is meant to match; `slHotkeyMatches()` is the compare. Empty is a
+normal value and means the action has no key of its own.
+
+**What a button says is what fires it.** The overlay's keycaps, the panel's
+sub-lines and the popup's list are all rendered from the binding in storage and
+from `chrome.commands.getAll()` — never from the manifest's `suggested_key`,
+which is only a suggestion Chrome is free to ignore. A keycap appears only for a
+key that actually does something, so an action with neither reads as unbound
+rather than claiming a shortcut the rep does not have. `slHotkeyLabel()` has a
+compact form for the keycaps, where two of them share the 210px column, and a
+full one for the popup.
+
+Transcription deliberately has no binding of its own: capture arming makes a
+page keypress able to stop capture but never to reliably start it (see
+`docs/architecture.md`), so the popup shows it as a Chrome shortcut and says
+why.
+
 ### Message protocol
 
-`{type:'dialer-action', action}` flows toward the content script; `{type:'status', msg, kind}` flows back. The action names double as the manifest command names and the handler dispatch keys — keep all three aligned when adding an action.
+`{type:'dialer-action', action}` flows toward the content script; `{type:'status', msg, kind}` flows back. The action names double as the manifest command names, the `hotkeys` storage keys and the handler dispatch keys — keep all four aligned when adding an action.
+
+`{type:'command-keys'}` is the one message the worker **answers** rather than relays (`sendResponse`, with `return true` to keep the channel open); `chrome.commands.getAll()` exists only in extension contexts, so a content script cannot read its own shortcuts. The panel and the popup call it directly instead.
 
 Transcript and status messages from the offscreen document reach the panel **directly** via `chrome.runtime.sendMessage`. The service worker observes them for its state machine and deliberately does not re-broadcast on that channel; re-broadcasting would render every transcript line twice in the panel.
 
@@ -141,7 +181,8 @@ When Salesloft ships UI changes, these are what break.
 
 - `killAndLog` sets the disposition **before** clicking "Log & Complete". Any failed step throws, surfaces "Stopped: … Finish manually.", and leaves the call unlogged — never log with a wrong or missing disposition.
 - A `busy` flag serializes flows; hotkeys and clicks are ignored while one runs.
-- In-page hotkeys are suppressed while typing (`isTyping()`).
+- In-page key bindings are suppressed while typing (`isTyping()`) — which is what makes a bare letter a usable binding at all — and ignore auto-repeat, so a held key cannot queue flows behind `busy`.
+- **The keys on the buttons are read back, never assumed.** The overlay and the panel print the rep's binding and whatever `chrome.commands.getAll()` reports, and print nothing for an action that has neither. Hard-coding `Ctrl⇧9` there is how the buttons came to claim a shortcut Chrome had left unassigned.
 - **The overlay never moves or resizes with its content.** It is pinned bottom-left and stacked as three bands: the contact alert, the row, the status. The row carries everything the rep aims at — the button column a fixed 210px, the transcript pane a fixed 280px, and buttons, pane and rail all exactly `PANEL_HEIGHT`, so the three finish on the same line and transcript lines scroll rather than push anything around. The status is a full-width line **below** that row rather than a slice of the button column: a sentence reads better across the box than down 210px, and down there it has nothing to push. Its height is **reserved, not measured** — one line beside a transcript, where the box is wide enough for any status we write, two without one, and the tooltip carries the rest — which is what stops a long "Stopped: …" from shoving the buttons upward. The buttons stretch **vertically** to meet the pane and never widen: the pair keeps the column's width and splits it, so their left/right positions are identical with the transcript on, off or folded away. The contact alert is the one part that comes and goes on its own, so it is a full-width banner **above** that row — the overlay is anchored at its foot, so the banner grows the box upward and moves nothing (`width:0;min-width:100%` stops a long tag deciding the overlay's width). Hover and press effects are `filter`/`transform` only, for the same reason — a `scale()` press does not touch layout. Those states are written in cascade order in `overlayStyle()` — hover, then press, then `sl-busy`, then reduced-motion — because they are all the same specificity, so the later rule is the one that wins: the press has to beat the hover it happens under, a press being thrown away by `busy` has to beat both, and reduced motion drops the movement while leaving the colour to answer. Reordering them is how that silently breaks. The rail's live dot is positioned out of the flow for the same reason: in it, it would hold a slot that is empty whenever the pane is showing. **Sizes come from `TYPE` and gaps from the 2× rule.** `TYPE` is four sizes named for their use (`action` 13, `read` 12, `caption` 11, `overline` 10) and nothing is set off it — `STATUS_LINE` is derived from `TYPE.read` so the reserve and the leading cannot drift apart. Gaps encode grouping: 6 inside a group (the button pair, the pane and its rail), 12 between them, because space only groups when the outer gap is at least twice the inner one. The status is the exception that needs `STATUS_GAP` on top — every other band is a shape of its own (a tinted banner, filled buttons, a bordered pane) and the shape does the grouping, but the status is bare text on the box. Nothing else resizes the overlay but a deliberate click: transcription on or off (which adds the pane and the taller buttons), and minimising the pane (width only).
 - **Minimising hides the pane, not the transcript.** The rail survives it, so pause/copy/save/clear and a live indicator stay reachable and no captured line is lost; capture itself is untouched. The flag lives in `txView` rather than storage, so it survives an overlay rebuild (a settings toggle, a stale copy being replaced) but not a page reload.
 - **Nothing renders over the Salesloft page.** The contact alert appears only in the floating panel and as the tinted line inside the overlay (`window.__slOnContactAlert`); do not bring back a floating toast.

@@ -48,8 +48,16 @@ refresh the tab, then check that **Buttons on Salesloft page** is on in
 settings. If a route that clearly is a contact's page shows nothing, Salesloft
 has changed it; `slIsContactUrl()` in `extension/defaults.js` is what decides.
 
-**Pressed the shortcut and nothing happened.** Make sure a Salesloft tab is open
-in Chrome, then refresh it once.
+**Pressed a key and nothing happened.** Make sure a Salesloft tab is open in
+Chrome, then refresh it once.
+
+Which key it was decides where to look. The rep's own bindings are heard by the
+Salesloft page and the floating panel, so they need one of those focused, and
+they are suppressed while the caret is in a field (`isTyping()` in
+`content.js`). Chrome's shortcuts are the ones that reach across tabs, and
+Chrome leaves one unset when its suggested key is already taken by another
+extension — the settings popup lists what `chrome.commands.getAll()` actually
+reports, which is also what the buttons print.
 
 **Status says "Stopped" or "Timed out".** The extension could not find a button
 it expected. Finish logging that call by hand. If it happens on every call,
@@ -98,8 +106,9 @@ that moment.
 persists across tab switches for the rest of the call, so you can go back to
 LinkedIn or ZoomInfo as usual.
 
-What does *not* arm capture: the F8/F9 in-page hotkeys, the on-page overlay
-buttons, the floating panel buttons, Salesloft's own Call button, or any hotkey
+What does *not* arm capture: the rep's own key bindings (they are page and
+extension-page key events, not invocations), the on-page overlay buttons, the
+floating panel buttons, Salesloft's own Call button, or any Chrome shortcut
 pressed while a different tab is in front.
 
 ### "Transcription offline"

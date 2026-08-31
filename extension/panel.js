@@ -37,13 +37,66 @@ function send(action) {
   });
 }
 
-document.getElementById('kill').addEventListener('click', () => send('kill-and-log'));
-document.getElementById('call').addEventListener('click', () => send('start-call'));
+const actionButtons = [...document.querySelectorAll('.row button[data-action]')];
+for (const button of actionButtons) {
+  button.addEventListener('click', () => send(button.dataset.action));
+}
+
+// Anything the panel has to say replaces the opening line, so the opening line
+// is only rewritten while it is still the opening line.
+let statusPristine = true;
 
 function setStatus(msg, kind) {
+  statusPristine = false;
   els.status.textContent = msg;
   els.status.className = kind || '';
 }
+
+// ------------------------------------------------------------- key bindings
+// The panel is a window of its own, so a key pressed here never reaches the
+// Salesloft page — which is why it answers the rep's bindings itself. Left
+// focused on a second monitor, it dials from the number pad like the page does.
+let hotkeys = self.slNormalizeHotkeys(self.SL_DEFAULTS.hotkeys);
+// Chrome's own shortcut per command, read back rather than assumed: a
+// suggested key that collided with another extension is simply not assigned.
+let commandKeys = {};
+
+function renderKeys() {
+  for (const button of actionButtons) {
+    const action = button.dataset.action;
+    // The rep's own binding reaches this window and the Salesloft page;
+    // Chrome's reaches any tab. Either can be missing, and binding the key
+    // Chrome already has makes them the same key said twice.
+    const own = self.slHotkeyLabel(hotkeys[action], false);
+    const anywhere = self.slHotkeyLabel(commandKeys[action], false);
+    const keys = [own, anywhere].filter((key, i, all) => key && all.indexOf(key) === i);
+    button.querySelector('.sub').textContent = keys.join('  ·  ') || 'Not bound';
+
+    const said = [];
+    if (own) said.push(`${own} here and on the Salesloft page`);
+    if (anywhere && anywhere !== own) said.push(`${anywhere} from any tab`);
+    button.title = said.join(', ') || 'No key bound — set one in the extension settings';
+  }
+  // True only while Chrome has a shortcut of its own: the rep's bindings need
+  // this window or the Salesloft page to have focus.
+  if (statusPristine) {
+    const fromAnywhere = actionButtons.some((b) => commandKeys[b.dataset.action]);
+    els.status.textContent = fromAnywhere ? 'Ready — shortcuts work from anywhere' : 'Ready';
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  const pressed = self.slHotkeyFromEvent(e);
+  if (!pressed) return;
+  for (const action of self.SL_HOTKEY_ACTIONS) {
+    if (pressed === hotkeys[action]) {
+      e.preventDefault();
+      send(action);
+      return;
+    }
+  }
+});
 
 // -------------------------------------------------------------- transcription
 function setConnection(state, detail) {
@@ -282,10 +335,29 @@ chrome.storage.sync.get(self.SL_DEFAULTS, (settings) => {
   // The panel stays fully usable with transcription off — the pane is simply
   // not there.
   els.transcription.classList.toggle('on', !!settings.transcription);
+  hotkeys = self.slNormalizeHotkeys(settings.hotkeys);
+  renderKeys();
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'sync' && changes.transcription) {
+  if (area !== 'sync') return;
+  if (changes.transcription) {
     els.transcription.classList.toggle('on', !!changes.transcription.newValue);
   }
+  if (changes.hotkeys) {
+    hotkeys = self.slNormalizeHotkeys(changes.hotkeys.newValue);
+    renderKeys();
+  }
 });
+
+// This is an extension page, so it can ask Chrome directly. The buttons render
+// with whatever is known and repaint when the answer arrives.
+chrome.commands
+  .getAll()
+  .then((commands) => {
+    for (const command of commands) commandKeys[command.name] = command.shortcut || '';
+    renderKeys();
+  })
+  .catch(() => { /* keep whatever the rep's own bindings say */ });
+
+renderKeys();

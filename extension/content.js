@@ -16,6 +16,7 @@
 
   chrome.storage.sync.get(settings, (stored) => {
     Object.assign(settings, stored);
+    settings.hotkeys = window.slNormalizeHotkeys(settings.hotkeys);
     settingsReady = true;
     syncOverlay();
   });
@@ -33,9 +34,40 @@
       settings.transcription = changes.transcription.newValue;
       syncOverlay(true);
     }
+    // A rebound key repaints the keycaps and nothing else. The buttons keep
+    // their size — the caps sit inside a fixed column — so this cannot move
+    // anything, and a flow that is part-way through logging a call is left
+    // alone with its status line.
+    if (changes.hotkeys) {
+      settings.hotkeys = window.slNormalizeHotkeys(changes.hotkeys.newValue);
+      renderKeycaps();
+    }
   });
 
-  const CONFIG = { keyKill: 'F8', keyCall: 'F9', stepTimeout: 8000, autoAdvanceDelayMs: 400 };
+  const CONFIG = { stepTimeout: 8000, autoAdvanceDelayMs: 400 };
+
+  // What each button is, keyed by the action it fires — the same names the
+  // manifest's commands and the message protocol use.
+  const ACTION_LABELS = { 'kill-and-log': 'No Answer', 'start-call': 'Call' };
+
+  // Chrome's own shortcut for each action, as Chrome has it right now: '' for a
+  // command it left unassigned. Answered by the service worker, which is the
+  // only context with chrome.commands, so this starts empty and the keycaps are
+  // repainted when the reply lands.
+  let commandKeys = {};
+
+  function loadCommandKeys() {
+    try {
+      if (!chrome.runtime || !chrome.runtime.id) return;
+      chrome.runtime.sendMessage({ type: 'command-keys' }, (reply) => {
+        // lastError has to be read or Chrome logs the unchecked one; a worker
+        // that did not answer just means the keycaps stay as they are.
+        if (chrome.runtime.lastError || !reply || !reply.keys) return;
+        commandKeys = reply.keys;
+        renderKeycaps();
+      });
+    } catch (e) { /* context invalidated — the buttons still work */ }
+  }
 
   // Reloading or updating the extension invalidates this script's context:
   // chrome.runtime becomes undefined, but the script (and its overlay) live on
@@ -442,26 +474,71 @@
     return style;
   }
 
-  // ✕ / ▶ over the label over the two keys that do the same thing. The keycaps
-  // are what the extra height buys: a rep who reads them once stops reaching
-  // for the mouse.
-  function actionButton(glyph, label, keys, background, onClick) {
+  // Which keys to print on a button: the rep's own binding, which fires on this
+  // page, and the shortcut Chrome currently has for the same action, which
+  // fires from any tab. Either can be unset — a rep who works from the number
+  // pad has no use for Chrome's combination, and Chrome drops a suggested key
+  // that collides with something already installed — so a keycap appears only
+  // for a key that really does something.
+  function keysFor(action) {
+    const hotkeys = settings.hotkeys || {};
+    const keys = [
+      window.slHotkeyLabel(hotkeys[action], true),
+      window.slHotkeyLabel(commandKeys[action], true),
+    ];
+    // Bind the key Chrome already has and both caps read the same; one is
+    // enough to say it.
+    return keys.filter((key, i) => key && keys.indexOf(key) === i);
+  }
+
+  // Written as nodes rather than innerHTML: a binding is whatever key the rep
+  // pressed, carried through storage, and it is never worth interpolating that
+  // into markup on the Salesloft page.
+  function paintKeys(button, action) {
+    const row = button.querySelector('.sl-keys');
+    if (!row) return;
+    const keys = keysFor(action);
+    row.textContent = '';
+    for (const key of keys) {
+      const cap = document.createElement('span');
+      cap.className = 'sl-key';
+      cap.textContent = key;
+      row.appendChild(cap);
+    }
+    const label = ACTION_LABELS[action];
+    button.title = keys.length ? `${label} — ${keys.join(' or ')}` : `${label} — no key bound`;
+  }
+
+  function renderKeycaps() {
+    if (!ctl) return;
+    paintKeys(ctl.kill, 'kill-and-log');
+    paintKeys(ctl.call, 'start-call');
+  }
+
+  // ✕ / ▶ over the label over the keys that do the same thing. The keycaps are
+  // what the extra height buys: a rep who reads them once stops reaching for
+  // the mouse. They are also the only place the extension says what the keys
+  // are while the rep is working, so they show what is bound now rather than
+  // what the manifest once suggested.
+  function actionButton(glyph, action, background, onClick) {
     const b = document.createElement('button');
     b.className = 'sl-act';
     b.type = 'button';
-    b.title = `${label} — ${keys.join(' or ')}`;
     // The glyph and the label are one thing — what the button is — so they sit
     // close together. The keycaps say how else to fire it, which is a note
     // about the button rather than part of its name, so they get twice the
-    // distance. An even stack of three read as three equal lines.
+    // distance. An even stack of three read as three equal lines. The keycap
+    // row keeps its slot with no keys bound: an empty row is 0px tall and the
+    // pair above it is centred, so the button reads the same either way.
     b.innerHTML =
       '<span style="display:flex;flex-direction:column;align-items:center;gap:4px">' +
         `<span style="font-size:20px;line-height:1">${glyph}</span>` +
-        `<span style="font-size:${TYPE.action}px;font-weight:600;line-height:${LEADING.label};letter-spacing:.01em">${label}</span>` +
+        `<span style="font-size:${TYPE.action}px;font-weight:600;line-height:${LEADING.label};letter-spacing:.01em">${ACTION_LABELS[action]}</span>` +
       '</span>' +
-      `<span style="display:flex;gap:3px">${keys
-        .map((k) => `<span class="sl-key">${k}</span>`)
-        .join('')}</span>`;
+      // Clipped at the button's edge rather than allowed to paint over its
+      // neighbour: a long pair of caps is the one thing here whose width the
+      // extension does not choose.
+      '<span class="sl-keys" style="display:flex;gap:3px;max-width:100%;min-width:0;overflow:hidden"></span>';
     b.style.cssText = [
       'flex:1 1 0', 'min-width:0', 'height:100%', 'box-sizing:border-box',
       'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
@@ -471,6 +548,7 @@
       'text-align:center', 'font-family:inherit',
     ].join(';');
     b.addEventListener('click', onClick);
+    paintKeys(b, action);
     return b;
   }
 
@@ -535,9 +613,9 @@
       `height:${hasTranscript ? PANEL_HEIGHT : BUTTONS_SHORT}px`,
     ].join(';');
 
-    const kill = actionButton('✕', 'No Answer', [CONFIG.keyKill, 'Ctrl⇧9'],
+    const kill = actionButton('✕', 'kill-and-log',
       'linear-gradient(180deg,#cf4436 0%,#a12d1e 100%)', killAndLog);
-    const call = actionButton('▶', 'Call', [CONFIG.keyCall, 'Ctrl⇧0'],
+    const call = actionButton('▶', 'start-call',
       'linear-gradient(180deg,#259954 0%,#146639 100%)', startCall);
     row.appendChild(kill);
     row.appendChild(call);
@@ -968,7 +1046,12 @@
     startTranscriptTimer();
   }
 
-  // ---------------- In-page fallback hotkeys (F8/F9) ----------------
+  // ---------------- In-page key bindings ----------------
+  // The rep's own keys, set in the settings popup. This is the layer Chrome
+  // cannot offer: chrome://extensions/shortcuts takes a Ctrl or Alt
+  // combination and nothing else, so a number pad binding can only be heard
+  // here, by the page it fires on. Chrome's commands still cover the from-any-
+  // tab case, and both routes end at the same two functions.
   function isTyping() {
     const el = document.activeElement;
     return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
@@ -977,12 +1060,29 @@
   document.addEventListener(
     'keydown',
     (e) => {
+      // Typing a note during a call must never dial. This is why a bare letter
+      // is a usable binding at all, and why the settings popup can say so.
       if (isTyping()) return;
-      if (e.key === CONFIG.keyKill) { e.preventDefault(); killAndLog(); }
-      if (e.key === CONFIG.keyCall) { e.preventDefault(); startCall(); }
+      // A held key repeats; a held dial key would queue flows behind the busy
+      // flag rather than doing anything the rep asked for.
+      if (e.repeat) return;
+      const pressed = window.slHotkeyFromEvent(e);
+      if (!pressed) return;
+      const hotkeys = settings.hotkeys || {};
+      if (pressed === hotkeys['kill-and-log']) { e.preventDefault(); killAndLog(); }
+      else if (pressed === hotkeys['start-call']) { e.preventDefault(); startCall(); }
     },
     true
   );
+
+  // Chrome has no event for a shortcut being reassigned, and the page the rep
+  // reassigns it on is chrome://extensions/shortcuts — another tab. Coming back
+  // to Salesloft is the moment the keycaps can be wrong, so that is when they
+  // are re-read.
+  loadCommandKeys();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) loadCommandKeys();
+  });
 
   // ---------------- Call state detection (PR-1, observe only) ----------------
   // This path never clicks anything. It watches for the End Call control and
