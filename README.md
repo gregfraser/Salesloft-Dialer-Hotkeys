@@ -6,12 +6,6 @@ Make cadence calling faster. Instead of clicking End Call, picking a disposition
   <img src="extension/images/controls.png" alt="The dialer plate: a red No Answer button bound to F8 beside a green Call button bound to F9, with a status line reading Connected and a call timer at 00:35" width="440">
 </p>
 
-- 🔴 **The red button** — ends the call, logs it as "No Answer," completes the cadence step, and lines up the next person.
-- 🟢 **The green button** — starts the next call.
-
-That's it. Dial, no answer, red, green, repeat. Pick whichever keys suit you —
-the number pad included — and the buttons show what you picked.
-
 And before you dial, it checks the contact's page for you — if Salesloft already
 has them tagged **Meeting Scheduled**, **Interested**, or **No Interest**, a
 colour-coded alert says so, right above the buttons.
@@ -50,10 +44,6 @@ Chrome needs you to load it manually — that's what these steps do.
 > **Don't delete or move this folder later.** Chrome runs the extension directly
 > from it — if the folder goes in the trash, the extension stops working.
 
-> [!NOTE]
-> Comfortable with git? `git clone https://github.com/gregfraser/Salesloft-Dialer-Hotkeys.git`
-> gets you the same folder with nothing to extract.
-
 ### Step 2 — Open Chrome's extensions page
 
 1. Click Chrome's address bar.
@@ -64,25 +54,14 @@ Chrome needs you to load it manually — that's what these steps do.
 1. Look in the **top-right corner** of that page.
 2. Click the **Developer mode** toggle so it turns on.
 
-> [!NOTE]
-> This only lets Chrome load an extension from a folder. It changes nothing else
-> about your browser.
-
 ### Step 4 — Load the extension
 
 1. Three new buttons appear near the top-left. Click **Load unpacked**.
 2. Open the folder from Step 1.
-3. Go **into** it and select the folder named **`extension`** — the one containing `manifest.json`.
+3. Go **into** it and select the folder named **`extension`**.
 4. Click **Select Folder**.
 
 ✅ A card reading **Salesloft Dialer Hotkeys** should now be on the page.
-
-> [!IMPORTANT]
-> **Updating from version 1.1?** The extension files moved into an `extension`
-> subfolder to make room for the transcription server, and Chrome will not find
-> them on its own. Go to `chrome://extensions`, remove the old **Salesloft
-> Dialer Hotkeys** card, and load it again pointing at the new `extension`
-> folder. Your settings are kept.
 
 ### Step 5 — Pin it to your toolbar
 
@@ -143,8 +122,7 @@ It won't go off screen, and it stays where you left it, on this computer, until
 you move it again.
 
 > [!TIP]
-> Only use the red button for no-answers. If someone picks up, talk like normal
-> and log that call yourself.
+> Only use the red button for no-answers. If someone picks up, after the conversation end the call like normal.
 
 ---
 
@@ -165,56 +143,15 @@ That's it — it saves straight away, and the button on the plate changes to mat
 | **Two keys, two jobs** | Give one action a key that already belongs to the other and it moves across; the row it came from shows "Not set" so you can see it went. |
 | **Clearing one** | The small ✕ next to it. The button and Chrome's shortcut still work. |
 
-### Dialing from another tab
-
-Reading a prospect's LinkedIn or checking ZoomInfo? Chrome can run the same two
-jobs from anywhere, using shortcuts of its own — by default
-<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd> (red) and
-<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>0</kbd> (green). The extension finds your
-Salesloft tab and does the work there.
-
-Those are Chrome's, not the extension's, and Chrome has rules about them: no
-number pad, and if another extension already uses the combination Chrome quietly
-leaves it **unset**. The settings popup lists what Chrome actually has right
-now, and the **Chrome shortcuts** button at the bottom opens the page where you
-can change them.
-
 ---
 
 ## Contact alerts
 
-Nothing kills a call faster than dialing someone who already told your teammate
-"not interested" — or who already has a meeting on the books. So the extension
-reads the Disposition and Sentiment tags already on the contact's page and shows
-a colour-coded alert before you dial — in the floating panel, and as a band that
-opens above the buttons on the page. Nothing pops up over Salesloft itself.
+The extension reads the Disposition and Sentiment tags already on the contact's page and shows
+a colour-coded alert before you dial, in the floating panel, and as a band that
+opens above the buttons on the page.
 
-It reads the tags off the activity feed — the pills on a logged call or a booked
-meeting — as well as any labelled Disposition/Sentiment field. Each tag keeps its
-own colour, so you can read the situation at a glance:
-
-| Tag | Colour | What it means |
-|---|---|---|
-| **Meeting Scheduled** | 🔵 Blue | Someone already booked this person. Don't cold-call them. |
-| **Interested** | 🟢 Green | Warm. Worth a call, but not a cold one — read the notes first. |
-| **No Interest** | 🔴 Red | They've said no. Check before you dial again. |
-
-The alert shows the tag itself in its colour and nothing else — no wording of
-its own in front of it.
-
-If more than one tag is on the page, every tag still shows in its own colour, and
-the alert itself takes the colour of the most important one — blue first, then
-red, then green.
-
-The alert follows whoever is on screen: it opens when you move to a person who
-has a tag, and closes again when their page is clean. The floating panel and the
-on-page plate show the same alert, so you see it whichever one you work from —
-including from another tab.
-
-> [!NOTE]
-> This reads the page — it doesn't change anything and it never logs a call for
-> you. It also ignores the Disposition dropdown you're filling in right now, so
-> picking "No Interest" while logging a call won't set off an alert.
+The dispositions and sentiments it alerts to can be customized on the settings menu.
 
 ---
 
@@ -278,74 +215,9 @@ talking to each other.
 > gigabyte of memory — from login until you close it. That's what makes the
 > first call of the day as fast as the rest.
 
-<details>
-<summary>Prefer the command line?</summary>
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1
-powershell -ExecutionPolicy Bypass -File scripts\start-server.ps1
-powershell -ExecutionPolicy Bypass -File scripts\autostart.ps1 -Enable
-```
-
-The `.cmd` files do exactly this and nothing more.
-</details>
-
-### Start it on a call
-
-1. Click the **Salesloft tab** so you're looking at it.
-2. Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>8</kbd>.
-
-That "looking at the Salesloft tab" part matters. Chrome only lets the extension
-listen to a tab you were actually on when you pressed the key — so unlike
-Chrome's dial shortcuts, this one won't work from LinkedIn. Once it's started it
-keeps going, and you can switch tabs freely for the rest of the call.
-
-This one has to be a Chrome shortcut for the same reason, so it can't be a
-number pad key and Chrome may have left it unset. The settings popup lists what
-Chrome actually has.
-
-If you see **"Transcription not armed"**, that's what happened. Switch back to
-Salesloft and press it again.
-
-### Read it
-
-The transcript shows up in two places, and you can use either: the floating
-panel, and a pane that appears beside the buttons on the Salesloft page. Both
-show the same words at the same time.
-
-Along the top of the pane: a light and the word **LIVE** while it's listening,
-the call clock, and three buttons.
-
-| Button | What it does |
-|---|---|
-| **«** | Folds the pane away. **»** brings it back. |
-| **⏸** | Pauses transcription. Press again to resume. |
-| **↓** | Saves what's there as a text file. |
-
-The floating panel has those plus **⧉** to copy everything and **✕** to clear.
-
-Scroll up to read something earlier and it stops auto-scrolling — a **↓ New
-text** pill appears to tell you more has arrived. Scroll back to the bottom, or
-click the pill, and it resumes.
-
-Folding the pane away (**«**) leaves that top strip behind, so the corner of the
-page is just the two dialer buttons and a strip. Transcription keeps running
-while it's folded — the light stays lit and nothing you've captured is lost.
-
 The on-page pane keeps the last few calls, one after another with a divider
 between them, so you can still look back at the previous conversation while
 you're dialing the next person.
-
-Nothing is saved to your computer unless you ask. When a call ends, whichever
-transcript you're using says "Transcript ready — ↓ to save" and highlights the
-save button; click it for the calls worth keeping and ignore it for the rest.
-You'd be downloading a file for every no-answer otherwise.
-
-> [!TIP]
-> Treat the transcript as an aid, not a record of truth. Phone audio is
-> compressed and speech recognition gets names, acronyms and numbers wrong more
-> often than ordinary words — which is exactly the content worth double-checking
-> before you read it back.
 
 ### If something looks wrong
 
@@ -440,21 +312,3 @@ and click **Load unpacked** again.
 - If transcription breaks, it goes quiet and the call carries on. It will never interrupt you mid-conversation with a popup.
 
 ---
-
-## For developers
-
-- [docs/architecture.md](docs/architecture.md) — how the pieces fit together and why
-- [docs/troubleshooting.md](docs/troubleshooting.md) — symptoms and fixes
-- [CLAUDE.md](CLAUDE.md) — working in this codebase
-
-Run the tests:
-
-```bash
-python -m pytest tests/                        # server, protocol, benchmark
-node --test tests/test_salesloft_detection.js  # Salesloft DOM detection
-node --test tests/test_hotkeys.js              # key bindings
-node --test tests/test_pcm_worklet.js          # audio downsampling
-node --test tests/test_transcript_format.js    # shared transcript formatting
-node --test tests/test_contact_page.js         # which routes are a contact
-node --test tests/test_contact_alert.js        # tag matching
-```
