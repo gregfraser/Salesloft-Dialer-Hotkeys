@@ -72,12 +72,14 @@ function renderKeys() {
   for (const button of actionButtons) {
     const action = button.dataset.action;
     // The rep's own binding reaches this window and the Salesloft page;
-    // Chrome's reaches any tab. Either can be missing, and binding the key
-    // Chrome already has makes them the same key said twice.
+    // Chrome's reaches any tab. The sub-line shows the rep's, and falls back to
+    // Chrome's only when they have none — same rule as the on-page plate, and
+    // for the same reason: Chrome usually holds one of the two actions and not
+    // the other, so printing both made a rebound pair read as mismatched. The
+    // tooltip below still names both.
     const own = self.slHotkeyLabel(hotkeys[action], false);
     const anywhere = self.slHotkeyLabel(commandKeys[action], false);
-    const keys = [own, anywhere].filter((key, i, all) => key && all.indexOf(key) === i);
-    button.querySelector('.sub').textContent = keys.join('  ·  ') || 'Not bound';
+    button.querySelector('.sub').textContent = own || anywhere || 'Not bound';
 
     const said = [];
     if (own) said.push(`${own} here and on the Salesloft page`);

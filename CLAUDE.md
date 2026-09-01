@@ -140,6 +140,18 @@ rather than claiming a shortcut the rep does not have. `slHotkeyLabel()` has a
 compact form for the keycaps, where two of them share the 214px column, and a
 full one for the popup.
 
+**One key per button, and it is the rep's own.** The overlay's keycap and the
+panel's sub-line show the binding from storage, and fall back to
+`chrome.commands.getAll()` only for an action that has no binding of its own.
+Both used to show at once, and the pair stopped reading as a pair the moment the
+rep rebound anything: Chrome takes the suggested keys it can get and silently
+drops the ones already claimed, so it typically holds one of the two actions and
+not the other — rebind to F11/F12 and one button reads "F11 Ctrl⇧9" while its
+neighbour reads "F12". The eye lands on the difference rather than the keys. The
+button is a reminder of what is under the hand; the `title` on both surfaces
+still names both keys and says where each works, and the popup remains the full
+account of what Chrome actually has.
+
 Transcription deliberately has no binding of its own: capture arming makes a
 page keypress able to stop capture but never to reliably start it (see
 `docs/architecture.md`), so the popup shows it as a Chrome shortcut and says

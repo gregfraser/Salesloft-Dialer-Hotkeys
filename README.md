@@ -119,8 +119,10 @@ Open Salesloft and start your cadence like normal. Then:
 any key you like, including the number pad.** Most reps end up on the pad, one
 hand on it all day: see [Choosing your keys](#choosing-your-keys).
 
-The buttons show the keys that are actually set, so you never have to remember
-which is which — whatever you bind is printed right on them.
+The buttons show the key that's actually set, so you never have to remember
+which is which — whatever you bind is printed right on them. (Just the one key,
+yours. Chrome's own from-another-tab shortcuts are listed in settings, and hover
+a button to see both.)
 
 ### Reading the plate
 

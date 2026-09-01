@@ -556,21 +556,28 @@
     return style;
   }
 
-  // Which keys to print on a button: the rep's own binding, which fires on this
-  // page, and the shortcut Chrome currently has for the same action, which
-  // fires from any tab. Either can be unset — a rep who works from the number
-  // pad has no use for Chrome's combination, and Chrome drops a suggested key
-  // that collides with something already installed — so a keycap appears only
-  // for a key that really does something.
+  // Which key to print on a button: the rep's own binding, which fires on this
+  // page. Chrome's shortcut for the same action fires from any tab, but it is
+  // printed only when the action has no binding of its own.
+  //
+  // Both used to show, and the pair stopped reading as a pair the moment the
+  // rep rebound anything: Chrome takes the suggested keys it can get and
+  // silently drops the ones already claimed, so it typically holds one of the
+  // two actions and not the other. Rebind to F11/F12 and one button reads
+  // "F11 Ctrl⇧9" while its neighbour reads "F12" — the rep's eye lands on the
+  // difference, not the keys. The button is a reminder of the key under the
+  // hand; the tooltip still names both, and the settings popup is where the
+  // full account of what Chrome actually has lives.
+  //
+  // Either can still be unset — a rep who works from the number pad has no use
+  // for Chrome's combination, and Chrome may have left it unassigned — so a
+  // keycap appears only for a key that really does something.
   function keysFor(action) {
     const hotkeys = settings.hotkeys || {};
-    const keys = [
-      window.slHotkeyLabel(hotkeys[action], true),
-      window.slHotkeyLabel(commandKeys[action], true),
-    ];
-    // Bind the key Chrome already has and both caps read the same; one is
-    // enough to say it.
-    return keys.filter((key, i) => key && keys.indexOf(key) === i);
+    const own = window.slHotkeyLabel(hotkeys[action], true);
+    if (own) return [own];
+    const anywhere = window.slHotkeyLabel(commandKeys[action], true);
+    return anywhere ? [anywhere] : [];
   }
 
   // Written as nodes rather than innerHTML: a binding is whatever key the rep
@@ -587,8 +594,16 @@
       cap.textContent = key;
       row.appendChild(cap);
     }
+    // The cap shows one key; the tooltip is where the other one still lives,
+    // along with where each of them works.
+    const hotkeys = settings.hotkeys || {};
+    const own = window.slHotkeyLabel(hotkeys[action], true);
+    const anywhere = window.slHotkeyLabel(commandKeys[action], true);
+    const said = [];
+    if (own) said.push(`${own} here and on this page`);
+    if (anywhere && anywhere !== own) said.push(`${anywhere} from any tab`);
     const label = ACTION_LABELS[action];
-    button.title = keys.length ? `${label} — ${keys.join(' or ')}` : `${label} — no key bound`;
+    button.title = said.length ? `${label} — ${said.join(', ')}` : `${label} — no key bound`;
   }
 
   function renderKeycaps() {
