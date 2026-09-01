@@ -21,6 +21,18 @@
     syncOverlay();
   });
 
+  // The rep's last plate position. Local, and read as early as the settings
+  // are: it has to be in hand before the overlay is built, or the plate appears
+  // in the corner and then jumps to where they left it.
+  chrome.storage.local.get({ overlayPos: null }, (stored) => {
+    if (!stored || !stored.overlayPos) return;
+    platePos.x = Number(stored.overlayPos.x) || 0;
+    platePos.y = Number(stored.overlayPos.y) || 0;
+    // hold(), not to(): if the plate is already on screen this is a correction,
+    // not an animation the rep asked for.
+    if (plateX && plateY) { plateX.hold(platePos.x); plateY.hold(platePos.y); }
+  });
+
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return;
     if (changes.disposition) settings.disposition = changes.disposition.newValue;
@@ -252,6 +264,16 @@
     safeSend({ type: 'status', msg, kind });
   }
 
+  // The plate has always started the call timer the moment call-detect sees a
+  // call, so the number climbed with no word beside it. This is that word.
+  // It is the detection path talking, so it only ever adds: a flow that is
+  // part-way through logging owns the status line (busy), and a
+  // "Stopped: ... Finish manually." has to outlive the call it is about.
+  function setCallLive(live) {
+    if (statusDot) statusDot.style.background = live ? CALL_LIVE : FG_DIM;
+    if (live && !busy) setStatus('Connected');
+  }
+
   // ---------------- Optional on-page overlay ----------------
   const OVERLAY_ID = 'sl-hotkey-overlay';
 
@@ -259,62 +281,95 @@
   // overlay used to run 9/10/11/12/13px with no system behind it, and 9px is
   // below the floor for UI text however dense the tool is. Weight and colour
   // carry the rest of the hierarchy.
+  // Five sizes, named for what they are for, and nothing off the scale. The
+  // plate leads with its buttons, so the action label is the largest thing
+  // here; everything else steps down from it. Weight and colour carry the rest
+  // of the hierarchy.
   const TYPE = {
-    action: 13,     // the button labels — the largest thing here, and the point
-    read: 12,       // what the prospect said, and what the extension says back
-    caption: 11,    // timestamps, the call timer
-    overline: 10,   // keycaps and the uppercase labels; the floor
+    action: 15,     // the button labels and their glyph — the point of the plate
+    read: 13,       // what the prospect said, and what the extension says back
+    alert: 12,      // the contact tag
+    caption: 11,    // the pane's timer and its placeholder
+    overline: 10,   // keycaps, LIVE, ON PAGE; the floor
   };
   // Wrapping text needs 1.4 or better; a label on one line can sit tighter.
-  const LEADING = { read: 1.4, label: 1.15 };
+  const LEADING = { read: 1.45, label: 1.1 };
 
-  // Every part of the overlay is a fixed size. The two action buttons are what
+  // Every part of the plate is a fixed size. The two action buttons are what
   // the rep aims at all day, so nothing the extension displays — a long status
-  // line, a contact alert appearing, a talkative prospect — is allowed to move
-  // them. That is why the alert keeps its space even when there is no alert,
-  // and why these are constants rather than whatever the content needs.
-  const CONTROLS_WIDTH = 210;   // the button column, unchanged whatever else is shown
-  const TRANSCRIPT_WIDTH = 280;
-  const PANEL_HEIGHT = 120;     // the buttons, the pane and the rail: one row, one height
-  const BOX_PAD = 8;
-  // Grouping is carried by space, and space only groups when the gap between
-  // groups is at least twice the gap inside one. Inside the button pair is 6,
-  // and the rail belongs to the pane at 6, so the two groups sit 12 apart. The
-  // bands are each a shape of their own — a tinted banner, filled buttons, a
-  // bordered pane — so they need less, except the status, which is bare text
-  // and gets STATUS_GAP on top.
-  const MAIN_GAP = 12;          // the button column | the pane and its rail
+  // line, a talkative prospect — is allowed to move them. The contact tag is
+  // the one exception, and it is deliberate: it lands on the page scan, before
+  // the rep has decided to dial, and it springs the layout open rather than
+  // holding a permanently empty band.
+  const CONTROLS_WIDTH = 214;   // the button column, unchanged whatever else is shown
+  const TRANSCRIPT_WIDTH = 308;
+  const PANEL_HEIGHT = 108;     // the buttons and the pane: one row, one height
+  const BOX_PAD = 10;
+  // Grouping is carried by space. Inside the button pair is 6 and the pane sits
+  // 10 from them, so the two groups read as two. The stack — tag, row, status —
+  // is 8, which is more than the pair and less than the plate's own padding.
+  const MAIN_GAP = 10;          // the button column | the transcript pane
   const PAIR_GAP = 6;           // between the two action buttons
-  const RAIL_GAP = 6;           // between the pane and its rail
-  const STACK_GAP = 6;          // between the alert band and the row
-  const STATUS_GAP = 10;        // the row to the status, which has no shape
-  const ICON = 19;              // the rail's square buttons
-  // Five rail buttons and their gaps have to fit PANEL_HEIGHT, which is what
-  // stops the pane shrinking further.
-  const RAIL_ICON_GAP = 3;
-  // Reserved, never measured — that is what stops a long "Stopped: …" moving
-  // the buttons. Beside a transcript the box is wide enough for any of them on
-  // one line; on its own it is 210px, where the long ones need two. Either way
-  // the tooltip carries whatever still does not fit. Derived from the scale
-  // rather than picked, so the reserve and the leading cannot drift apart.
-  const STATUS_LINE = Math.round(TYPE.read * LEADING.read);
-  const STATUS_ONE_LINE = STATUS_LINE;
-  const STATUS_TWO_LINES = STATUS_LINE * 2;
-  // With a transcript beside them the buttons stretch to meet it — same column
-  // width, the pane's full height. With nothing to match they stay short: tall
-  // enough for the glyph, the label and the keycaps and no taller, so the
-  // dialer-only overlay is the smallest thing that still says what it does.
-  const BUTTONS_SHORT = 76;
+  const STACK_GAP = 8;          // between the tag slot, the row and the status
+  const ICON = 21;              // the pane header's square buttons
+  // Minimised, the pane keeps its header and nothing else: the light, the
+  // timer and the three buttons. Wide enough for exactly those.
+  const PANE_MINI_WIDTH = 146;
+  const HEADER_GAP = 6;         // inside the pane header
+  // The status is one line, always, and reserved whether or not it has
+  // anything to say — that is what stops a long "Stopped: …" from resizing the
+  // plate under the rep's cursor. Anything longer ellipsises and the tooltip
+  // carries the rest.
+  const STATUS_HEIGHT = 18;
 
-  // The browser's own easings are too weak to read as deliberate at these
-  // durations, so the overlay uses one strong ease-out everywhere. Press is
-  // near-instant and release is relaxed: the press is the interface saying it
-  // heard the rep, and that has to land the moment the mouse goes down.
+  // How close to the viewport edge a dragged plate may come to rest.
+  const DRAG_EDGE = 8;
+
+  // The plate itself: a translucent slab over the Salesloft page rather than a
+  // panel bolted onto it. The blur is what makes it read as glass; without it
+  // the alpha just looks like a washed-out solid.
+  const PLATE_RADIUS = 15;
+  const PLATE_BG = 'rgba(20,22,25,.74)';
+  const PLATE_BORDER = '1px solid rgba(255,255,255,.08)';
+  const PLATE_BLUR = 'blur(26px) saturate(160%)';
+  const PLATE_SHADOW =
+    'inset 0 1px 0 rgba(255,255,255,.10),0 20px 46px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.35)';
+  // Three elevations, used everywhere including the panel and the settings
+  // popup: the plate floats, a raised face sits on it, an inset field is cut
+  // into it. Nothing in this UI is flat.
+  const INSET_BG = '#0f1113';
+  const INSET_BORDER = '1px solid rgba(255,255,255,.05)';
+  const INSET_SHADOW = 'inset 0 2px 6px rgba(0,0,0,.6)';
+  const BUTTON_SHADOW =
+    'inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(0,0,0,.34),0 2px 5px rgba(0,0,0,.42)';
+
+  // Text, dimmest last.
+  const FG = '#e8e6e1';
+  const FG_SOFT = '#c9c6c0';
+  const FG_MUTED = '#9aa0a6';
+  const FG_DIM = '#6b6f76';
+  // The status dot while a call is up. Green, not the pane's recording red:
+  // that one means "we are transcribing", this one means "the call is
+  // connected", and both can be true at once.
+  const CALL_LIVE = '#5fc98d';
+
+  // Press and release are springs now (spring.js), not transitions — a thrown
+  // drag has to hand its release velocity to whatever carries it to rest, and
+  // no CSS easing accepts a velocity. These two remain for the colour-only
+  // states, where a transition is still the right tool.
   const EASE_OUT = 'cubic-bezier(.23,1,.32,1)';
-  const PRESS_MS = 60;
   const RELEASE_MS = 160;
 
-  let alertEl;
+  let alertEl;          // the tinted band itself
+  let alertSlot = null; // the slot that holds no space until the band arrives
+  let alertIn = null;   // spring that opens that slot
+  let alertDot = null;
+  let alertText = null;
+  let statusDot = null;
+  let timerEl = null;   // wherever the call timer currently lives
+  let plateX = null;    // the drag springs, kept so a resize can nudge the plate
+  let plateY = null;
+  let plateResizeBound = false;
   let overlayEl = null; // the box this copy of the script built, if any
   let ctl = null;       // the two action buttons, or null with no overlay
   let tx = null;        // transcript DOM refs, or null when the pane is not built
@@ -377,7 +432,15 @@
     document.getElementById(OVERLAY_ID)?.remove();
     overlayEl = null;
     statusEl = null;
+    statusDot = null;
     alertEl = null;
+    alertSlot = null;
+    alertIn = null;
+    alertDot = null;
+    alertText = null;
+    timerEl = null;
+    plateX = null;
+    plateY = null;
     ctl = null;
     tx = null;
   }
@@ -385,23 +448,38 @@
   // Subtle mirror of the contact alert inside the overlay — one tinted line,
   // nothing floating over the Salesloft UI. alerts.js computes the alert and
   // calls the hook below from the shared isolated world.
+  // '#2f6fd0' -> '47,111,208'. SL_PALETTE is authored as hex for the opaque
+  // surfaces that came first; the plate needs the same hue at an alpha, because
+  // a solid mixed for an opaque background goes muddy over the blur.
+  function hexToRgb(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+    if (!m) return '47,111,208';
+    const n = parseInt(m[1], 16);
+    return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+  }
+
   function renderOverlayAlert(alert) {
-    if (!alertEl) return;
+    if (!alertEl || !alertIn) return;
     if (!alert || !alert.tags || !alert.tags.length) {
-      alertEl.style.display = 'none';
-      alertEl.textContent = '';
-      alertEl.removeAttribute('title');
+      // Closes the slot and takes the band's space with it, so the plate
+      // settles back to its compact height. Quicker and flatter than the way in:
+      // a tag leaving is bookkeeping, a tag arriving is news.
+      alertIn.tune(0.26, 0);
+      alertIn.to(0);
       return;
     }
     const theme = (window.SL_PALETTE || {})[alert.color] ||
       { bg: '#3a3320', border: '#b8860b', text: '#ffd88a' };
     const text = alert.tags.join(' • ');
-    alertEl.textContent = text;
-    alertEl.title = text;   // the banner is one line; narrow, it ellipsises
-    alertEl.style.background = theme.bg;
-    alertEl.style.borderColor = theme.border;
+    alertText.textContent = text;
+    alertEl.title = text;   // the band is one line; narrow, it ellipsises
+    const rgb = hexToRgb(theme.border);
+    alertEl.style.background = `rgba(${rgb},.16)`;
+    alertEl.style.borderColor = `rgba(${rgb},.42)`;
     alertEl.style.color = theme.text;
-    alertEl.style.display = 'block';
+    alertDot.style.background = theme.text;
+    alertIn.tune(0.44, 0.3);
+    alertIn.to(1);
   }
   window.__slOnContactAlert = renderOverlayAlert;
 
@@ -416,79 +494,90 @@
   function overlayStyle() {
     const style = document.createElement('style');
     style.textContent = [
-      '@keyframes sl-pulse{0%,100%{opacity:1}50%{opacity:.35}}',
+      '@keyframes sl-pulse{0%,100%{opacity:1}50%{opacity:.3}}',
+      '@keyframes sl-line{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}',
+      // Thin and pale: on the inset pane a system scrollbar is a bright slab
+      // down the one dark surface here.
       `#${OVERLAY_ID} ::-webkit-scrollbar{width:8px}`,
-      `#${OVERLAY_ID} ::-webkit-scrollbar-thumb{background:#3a3d42;border-radius:4px}`,
-      `#${OVERLAY_ID} ::-webkit-scrollbar-thumb:hover{background:#4c5057}`,
+      `#${OVERLAY_ID} ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:4px}`,
+      `#${OVERLAY_ID} ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.24)}`,
       `#${OVERLAY_ID} ::-webkit-scrollbar-track{background:transparent}`,
       `#${OVERLAY_ID} button{font-family:inherit;margin:0}`,
       // Selection off on the controls, where a double-click would highlight a
       // label instead of firing the button — and on nothing else. The status
-      // and the contact alert stay selectable, because "Stopped: …" is the
-      // line a rep wants to paste into a message when something breaks.
+      // and the contact tag stay selectable, because "Stopped: …" is the line a
+      // rep wants to paste into a message when something breaks.
       `#${OVERLAY_ID} .sl-act,#${OVERLAY_ID} .sl-icon{user-select:none}`,
       `#${OVERLAY_ID} button:focus-visible{outline:2px solid #8ab4f8;outline-offset:2px}`,
-      // Order matters below: hover, then press, then busy. All three are the
-      // same specificity, so the later rule wins — the press has to beat the
-      // hover it happens under, and a press that is being thrown away has to
-      // beat both.
-      //
-      // The press is a scale rather than a 1px nudge: on a face this size a
-      // nudge is invisible, and the point of press feedback is that the rep
-      // sees the button answer before the flow starts.
-      `#${OVERLAY_ID} .sl-act{transition:transform ${RELEASE_MS}ms ${EASE_OUT},filter ${RELEASE_MS}ms ease}`,
-      `#${OVERLAY_ID} .sl-key{background:rgba(255,255,255,.17);border-radius:3px;padding:1px 4px;font-size:${TYPE.overline}px;font-weight:600;letter-spacing:.03em;white-space:nowrap}`,
-      // The small square buttons on the rail. Their resting look lives here so
-      // that a highlight set inline — the save nudge, the paused state — can be
-      // cleared back to it with an empty string.
-      `#${OVERLAY_ID} .sl-icon{background:transparent;border:1px solid #3a3d42;color:#e8e6e1;border-radius:6px;padding:0;font-size:${TYPE.caption}px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto;transition:transform ${RELEASE_MS}ms ${EASE_OUT},background-color ${RELEASE_MS}ms ease,border-color ${RELEASE_MS}ms ease}`,
-      `#${OVERLAY_ID} .sl-pill{transition:transform ${RELEASE_MS}ms ${EASE_OUT},filter ${RELEASE_MS}ms ease}`,
+
+      // No transform transitions anywhere below. Every press, drag and reveal
+      // on this plate is a spring writing an inline transform (spring.js), and
+      // a CSS transition on the same property would fight it — the spring would
+      // set a value and the transition would ease toward it, so the motion
+      // would arrive late and overshoot twice. Colour is still a transition,
+      // because colour has no velocity to hand over.
+      `#${OVERLAY_ID} .sl-act{transition:filter ${RELEASE_MS}ms ease}`,
+      `#${OVERLAY_ID} .sl-key{background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.16);` +
+        `box-shadow:inset 0 1px 0 rgba(255,255,255,.08);border-radius:4px;padding:1px 5px;` +
+        `font-size:${TYPE.overline}px;font-weight:600;letter-spacing:.04em;white-space:nowrap}`,
+      // The small square buttons in the pane header. Their resting look lives
+      // here so a highlight set inline — the save nudge, the paused state — can
+      // be cleared back to it with an empty string.
+      `#${OVERLAY_ID} .sl-icon{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);` +
+        `color:${FG_SOFT};border-radius:5px;padding:0;font-size:${TYPE.read}px;line-height:1;` +
+        `cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto;` +
+        `transition:background-color ${RELEASE_MS}ms ease,border-color ${RELEASE_MS}ms ease,color ${RELEASE_MS}ms ease}`,
+      // Saving is the one thing here that produces a file, so it carries the
+      // amber the rest of the extension already uses for "this writes something".
+      `#${OVERLAY_ID} .sl-icon.sl-save{background:rgba(184,134,11,.18);border-color:rgba(184,134,11,.6);color:#ffd88a}`,
+      `#${OVERLAY_ID} .sl-pill{transition:filter ${RELEASE_MS}ms ease}`,
+      `#${OVERLAY_ID} .sl-live{animation:sl-pulse 1.6s ease-in-out infinite}`,
 
       // Hover is a mouse state. A touchscreen fires it on tap and then leaves
       // it stuck on the last thing touched, so it is gated rather than global.
       '@media (hover:hover) and (pointer:fine){' +
-        `#${OVERLAY_ID} .sl-act:hover{filter:brightness(1.12)}` +
-        `#${OVERLAY_ID} .sl-icon:hover{background:#2f3238;border-color:#5a5e66}` +
+        `#${OVERLAY_ID} .sl-act:hover{filter:brightness(1.10)}` +
+        `#${OVERLAY_ID} .sl-icon:hover{background:rgba(255,255,255,.12);color:#fff}` +
+        `#${OVERLAY_ID} .sl-icon.sl-save:hover{background:rgba(184,134,11,.3);color:#ffd88a}` +
         `#${OVERLAY_ID} .sl-pill:hover{filter:brightness(1.25)}}`,
 
-      // Press. Shorter than the release on purpose: the answer has to land as
-      // the mouse goes down, and it can take its time coming back.
-      `#${OVERLAY_ID} .sl-act:active{transform:scale(.97);filter:brightness(.94);transition-duration:${PRESS_MS}ms}`,
-      // A shade deeper on the rail, which is small enough that .97 would not
-      // register.
-      `#${OVERLAY_ID} .sl-icon:active{transform:scale(.94);transition-duration:${PRESS_MS}ms}`,
-      `#${OVERLAY_ID} .sl-pill:active{transform:scale(.96);transition-duration:${PRESS_MS}ms}`,
-
       // A flow is running and clicks are being ignored, so the buttons say so
-      // rather than sitting there looking live — and a press that is being
-      // thrown away must not answer as though it was not.
+      // rather than sitting there looking live. The press spring is suppressed
+      // in the same state (see pressable's guard in buildOverlay), so a press
+      // that is being thrown away does not answer as though it was not.
       `#${OVERLAY_ID}.sl-busy .sl-act{filter:saturate(.4) brightness(.72);cursor:progress}`,
-      `#${OVERLAY_ID}.sl-busy .sl-act:active{transform:none}`,
 
-      // Reduced motion is gentler, not absent: the colour still answers the
-      // press, only the movement goes. Last, so it beats every :active above.
+      // Reduced motion: the springs already snap (spring.js checks the query on
+      // every call), so all that is left to stop is the looping LIVE dot.
       '@media (prefers-reduced-motion:reduce){' +
-        `#${OVERLAY_ID} .sl-act:active,#${OVERLAY_ID} .sl-icon:active,` +
-        `#${OVERLAY_ID} .sl-pill:active{transform:none}}`,
+        `#${OVERLAY_ID} .sl-live{animation:none}` +
+        `#${OVERLAY_ID} .sl-line{animation:none}}`,
     ].join('');
     return style;
   }
 
-  // Which keys to print on a button: the rep's own binding, which fires on this
-  // page, and the shortcut Chrome currently has for the same action, which
-  // fires from any tab. Either can be unset — a rep who works from the number
-  // pad has no use for Chrome's combination, and Chrome drops a suggested key
-  // that collides with something already installed — so a keycap appears only
-  // for a key that really does something.
+  // Which key to print on a button: the rep's own binding, which fires on this
+  // page. Chrome's shortcut for the same action fires from any tab, but it is
+  // printed only when the action has no binding of its own.
+  //
+  // Both used to show, and the pair stopped reading as a pair the moment the
+  // rep rebound anything: Chrome takes the suggested keys it can get and
+  // silently drops the ones already claimed, so it typically holds one of the
+  // two actions and not the other. Rebind to F11/F12 and one button reads
+  // "F11 Ctrl⇧9" while its neighbour reads "F12" — the rep's eye lands on the
+  // difference, not the keys. The button is a reminder of the key under the
+  // hand; the tooltip still names both, and the settings popup is where the
+  // full account of what Chrome actually has lives.
+  //
+  // Either can still be unset — a rep who works from the number pad has no use
+  // for Chrome's combination, and Chrome may have left it unassigned — so a
+  // keycap appears only for a key that really does something.
   function keysFor(action) {
     const hotkeys = settings.hotkeys || {};
-    const keys = [
-      window.slHotkeyLabel(hotkeys[action], true),
-      window.slHotkeyLabel(commandKeys[action], true),
-    ];
-    // Bind the key Chrome already has and both caps read the same; one is
-    // enough to say it.
-    return keys.filter((key, i) => key && keys.indexOf(key) === i);
+    const own = window.slHotkeyLabel(hotkeys[action], true);
+    if (own) return [own];
+    const anywhere = window.slHotkeyLabel(commandKeys[action], true);
+    return anywhere ? [anywhere] : [];
   }
 
   // Written as nodes rather than innerHTML: a binding is whatever key the rep
@@ -505,8 +594,16 @@
       cap.textContent = key;
       row.appendChild(cap);
     }
+    // The cap shows one key; the tooltip is where the other one still lives,
+    // along with where each of them works.
+    const hotkeys = settings.hotkeys || {};
+    const own = window.slHotkeyLabel(hotkeys[action], true);
+    const anywhere = window.slHotkeyLabel(commandKeys[action], true);
+    const said = [];
+    if (own) said.push(`${own} here and on this page`);
+    if (anywhere && anywhere !== own) said.push(`${anywhere} from any tab`);
     const label = ACTION_LABELS[action];
-    button.title = keys.length ? `${label} — ${keys.join(' or ')}` : `${label} — no key bound`;
+    button.title = said.length ? `${label} — ${said.join(', ')}` : `${label} — no key bound`;
   }
 
   function renderKeycaps() {
@@ -520,36 +617,153 @@
   // the mouse. They are also the only place the extension says what the keys
   // are while the rep is working, so they show what is bound now rather than
   // what the manifest once suggested.
-  function actionButton(glyph, action, background, onClick) {
+  function actionButton(glyph, action, background, glow, onClick) {
     const b = document.createElement('button');
     b.className = 'sl-act';
     b.type = 'button';
-    // The glyph and the label are one thing — what the button is — so they sit
-    // close together. The keycaps say how else to fire it, which is a note
-    // about the button rather than part of its name, so they get twice the
-    // distance. An even stack of three read as three equal lines. The keycap
-    // row keeps its slot with no keys bound: an empty row is 0px tall and the
-    // pair above it is centred, so the button reads the same either way.
+    // Glyph at the top, name and keys at the foot, pushed apart. The rep reads
+    // this button at a glance a hundred times a day, so the two things it has
+    // to say sit at the two ends of the face rather than stacked in the middle
+    // — the name lands on the same baseline on both buttons whatever the glyph
+    // above it is doing. Left-aligned for the same reason: two centred labels
+    // of different lengths give the pair no shared edge to read down.
     b.innerHTML =
-      '<span style="display:flex;flex-direction:column;align-items:center;gap:4px">' +
-        `<span style="font-size:20px;line-height:1">${glyph}</span>` +
-        `<span style="font-size:${TYPE.action}px;font-weight:600;line-height:${LEADING.label};letter-spacing:.01em">${ACTION_LABELS[action]}</span>` +
-      '</span>' +
-      // Clipped at the button's edge rather than allowed to paint over its
-      // neighbour: a long pair of caps is the one thing here whose width the
-      // extension does not choose.
-      '<span class="sl-keys" style="display:flex;gap:3px;max-width:100%;min-width:0;overflow:hidden"></span>';
+      `<span style="font-size:${TYPE.action}px;line-height:1;opacity:.9">${glyph}</span>` +
+      '<span style="display:flex;flex-direction:column;gap:7px;align-items:flex-start;max-width:100%;min-width:0">' +
+        `<span style="font-size:${TYPE.action}px;font-weight:600;letter-spacing:-.012em;line-height:${LEADING.label}">${ACTION_LABELS[action]}</span>` +
+        // Clipped at the button's edge rather than allowed to paint over its
+        // neighbour: a long pair of caps is the one thing here whose width the
+        // extension does not choose.
+        '<span class="sl-keys" style="display:flex;gap:4px;max-width:100%;min-width:0;overflow:hidden"></span>' +
+      '</span>';
     b.style.cssText = [
       'flex:1 1 0', 'min-width:0', 'height:100%', 'box-sizing:border-box',
-      'display:flex', 'flex-direction:column', 'align-items:center', 'justify-content:center',
-      'gap:8px', 'padding:5px 6px', 'border:none', 'border-radius:8px',
+      'display:flex', 'flex-direction:column', 'align-items:flex-start', 'justify-content:space-between',
+      'gap:8px', 'padding:11px 10px', 'border:none', 'border-radius:11px',
       'cursor:pointer', 'color:#fff', `background:${background}`,
-      'box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 1px 2px rgba(0,0,0,.35)',
-      'text-align:center', 'font-family:inherit',
+      // The glow is the button's own colour thrown onto the plate under it, so
+      // the two faces read as lit rather than pasted on.
+      `box-shadow:${BUTTON_SHADOW},${glow}`,
+      'text-align:start', 'font-family:inherit', 'user-select:none',
     ].join(';');
     b.addEventListener('click', onClick);
     paintKeys(b, action);
     return b;
+  }
+
+  // Where the rep last put the plate, as an offset from the bottom-left anchor.
+  // Local rather than synced: it is a position on this monitor, and a rep with
+  // a laptop and a 27" screen does not want one to dictate the other.
+  const platePos = { x: 0, y: 0 };
+  let savePosHandle = null;
+  // Set once the rep has actually moved the plate. Without it the very first
+  // paint of every page load would write the position straight back.
+  let plateMoved = false;
+
+  function savePlatePos() {
+    clearTimeout(savePosHandle);
+    // Re-armed on every painted frame, so the write lands 250ms after motion
+    // *stops* rather than 250ms after the release: a thrown plate is still
+    // travelling then, and saving mid-flight would restore it next page load to
+    // somewhere it only passed through.
+    savePosHandle = setTimeout(() => {
+      try {
+        chrome.storage.local.set({ overlayPos: { x: platePos.x, y: platePos.y } });
+      } catch (e) { /* context invalidated by a reload; a position is not worth throwing over */ }
+    }, 250);
+  }
+
+  // Keeps the plate on screen with a small margin. Returns offsets, not
+  // coordinates: the box is anchored bottom-left and only ever transformed.
+  function plateBounds(box) {
+    const r = box.getBoundingClientRect();
+    return {
+      minX: platePos.x + (DRAG_EDGE - r.left),
+      maxX: platePos.x + (window.innerWidth - DRAG_EDGE - r.right),
+      minY: platePos.y + (DRAG_EDGE - r.top),
+      maxY: platePos.y + (window.innerHeight - DRAG_EDGE - r.bottom),
+    };
+  }
+
+  // Drag the plate by its own chrome. Unlike the design prototype there is no
+  // host canvas scaling the page, so pointer deltas are already layout pixels
+  // and need no scale correction.
+  function makeDraggable(box) {
+    const paint = () => {
+      box.style.transform = `translate3d(${platePos.x}px,${platePos.y}px,0)`;
+      if (plateMoved) savePlatePos();
+    };
+    const X = window.slSpring(platePos.x, (v) => { platePos.x = v; paint(); }, 0.4, 0);
+    const Y = window.slSpring(platePos.y, (v) => { platePos.y = v; paint(); }, 0.4, 0);
+
+    let sx = 0, sy = 0, ox = 0, oy = 0, hist = [], b = null, on = false, moved = false;
+
+    box.addEventListener('pointerdown', (e) => {
+      // Anything the rep might be aiming at, or reading, is not a drag handle.
+      // The transcript list is marked because its text is selectable, and a
+      // drag starting inside it would fight the selection.
+      if (e.target.closest('button,input,textarea,select,[data-sl-nodrag]')) return;
+      on = true;
+      moved = false;
+      try { box.setPointerCapture(e.pointerId); } catch (err) { /* not available */ }
+      sx = e.clientX; sy = e.clientY;
+      ox = platePos.x; oy = platePos.y;
+      hist = [{ x: e.clientX, y: e.clientY, t: performance.now() }];
+      b = plateBounds(box);
+      box.style.cursor = 'grabbing';
+      box.style.willChange = 'transform';
+    });
+
+    box.addEventListener('pointermove', (e) => {
+      if (!on) return;
+      const rawX = e.clientX - sx, rawY = e.clientY - sy;
+      // A few pixels of slop, so a click that wobbles is still a click.
+      if (!moved && Math.abs(rawX) + Math.abs(rawY) < 4) return;
+      moved = true;
+      plateMoved = true;
+      hist.push({ x: e.clientX, y: e.clientY, t: performance.now() });
+      if (hist.length > 6) hist.shift();
+      // hold(), not to(): while the pointer is down the plate *is* the pointer,
+      // and a spring chasing it would trail behind the cursor.
+      X.hold(window.slBand(ox + rawX, b.minX, b.maxX, box.offsetWidth));
+      Y.hold(window.slBand(oy + rawY, b.minY, b.maxY, box.offsetHeight));
+    });
+
+    const release = () => {
+      if (!on) return;
+      on = false;
+      box.style.cursor = 'grab';
+      box.style.willChange = '';
+      if (!moved) return;
+      const a = hist[0], z = hist[hist.length - 1];
+      const dt = Math.max(16, z.t - a.t) / 1000;
+      const vx = (z.x - a.x) / dt, vy = (z.y - a.y) / dt;
+      const bb = plateBounds(box);
+      X.tune(0.4, 0.06); Y.tune(0.4, 0.06);
+      X.to(window.slClamp(platePos.x + window.slProject(vx), bb.minX, bb.maxX), vx);
+      Y.to(window.slClamp(platePos.y + window.slProject(vy), bb.minY, bb.maxY), vy);
+    };
+    box.addEventListener('pointerup', release);
+    box.addEventListener('pointercancel', release);
+
+    // A window that got smaller can leave the plate off screen entirely, and a
+    // plate the rep cannot reach is a plate they cannot put back.
+    if (!plateResizeBound) {
+      plateResizeBound = true;
+      window.addEventListener('resize', () => {
+        if (!overlayEl) return;
+        const bb = plateBounds(overlayEl);
+        const nx = window.slClamp(platePos.x, bb.minX, bb.maxX);
+        const ny = window.slClamp(platePos.y, bb.minY, bb.maxY);
+        if (nx !== platePos.x || ny !== platePos.y) {
+          plateMoved = true;
+          plateX.to(nx); plateY.to(ny);
+        }
+      });
+    }
+    plateX = X;
+    plateY = Y;
+    paint();
   }
 
   function buildOverlay() {
@@ -565,93 +779,157 @@
     const box = document.createElement('div');
     box.id = OVERLAY_ID;
     box.style.cssText = [
-      // Anchored bottom-left. Its height changes only when transcription is
-      // switched on or off, and its width only for that or the pane being
-      // minimised — both a deliberate click, never something it is displaying.
+      // Anchored bottom-left, then moved by transform alone, so the rep's own
+      // position survives every rebuild without touching the layout.
       'position:fixed', 'bottom:16px', 'left:16px', 'z-index:999999',
       'box-sizing:border-box',
       'display:flex', 'flex-direction:column', `gap:${STACK_GAP}px`,
-      'background:linear-gradient(180deg,#212429 0%,#191b1e 100%)',
-      'border:1px solid #3a3d42', 'border-radius:10px',
+      // Glass, not a panel: the Salesloft page stays legible underneath, which
+      // is what lets the plate sit over content instead of beside it. The blur
+      // does the work — without it the alpha reads as a washed-out solid.
+      `background:${PLATE_BG}`,
+      `backdrop-filter:${PLATE_BLUR}`, `-webkit-backdrop-filter:${PLATE_BLUR}`,
+      `border:${PLATE_BORDER}`, `border-radius:${PLATE_RADIUS}px`,
       `padding:${BOX_PAD}px`, 'font-family:system-ui,sans-serif', `font-size:${TYPE.read}px`,
       // Light text on a dark surface renders heavy on macOS. This box is its
       // own root, so it is set once here rather than on each part of it.
       '-webkit-font-smoothing:antialiased', '-moz-osx-font-smoothing:grayscale',
-      'color:#e8e6e1',
-      'box-shadow:0 6px 22px rgba(0,0,0,.42)',
+      `color:${FG}`,
+      `box-shadow:${PLATE_SHADOW}`,
+      // The whole plate is the drag handle; the controls opt out individually.
+      'cursor:grab', 'touch-action:none',
     ].join(';');
     if (busy) box.classList.add('sl-busy');
     box.appendChild(overlayStyle());
 
-    // Full width and above everything else: the alert is the one thing that
-    // appears and disappears on its own (a new contact has tags or it does
-    // not), and up here it costs nothing — the overlay is anchored at its foot,
-    // so it grows the box upward and leaves every control where it was. It also
-    // gets the whole width, so several tags still fit on one line.
+    // The contact tag holds no space until the page scan reports one. That scan
+    // lands before the rep has decided to dial, so the layout settles well
+    // ahead of the aim — which is what buys the plate its compact resting size
+    // instead of a permanently reserved, usually empty band.
+    alertSlot = document.createElement('div');
+    alertSlot.style.cssText = 'overflow:hidden;flex:0 0 auto';
+
     alertEl = document.createElement('div');
     alertEl.style.cssText = [
-      'display:none', 'flex:0 0 auto', 'box-sizing:border-box',
-      // Takes the box's width without setting it: a long tag must not be what
-      // decides how wide the overlay is.
-      'width:0', 'min-width:100%',
-      'padding:2px 7px', 'border:1px solid transparent', 'border-radius:5px',
-      `font-size:${TYPE.read}px`, 'font-weight:600', 'line-height:16px',
-      'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
+      'display:flex', 'align-items:center', 'gap:7px',
+      'padding:4px 8px', 'border-radius:8px',
+      'border:1px solid transparent', 'box-shadow:inset 0 1px 0 rgba(255,255,255,.06)',
+      'min-width:0',
     ].join(';');
-    box.appendChild(alertEl);
+
+    alertDot = document.createElement('span');
+    alertDot.style.cssText = 'width:5px;height:5px;border-radius:50%;flex:0 0 auto';
+
+    alertText = document.createElement('span');
+    alertText.style.cssText = [
+      `font-size:${TYPE.alert}px`, 'font-weight:600', 'letter-spacing:-.005em',
+      'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis', 'min-width:0',
+    ].join(';');
+
+    // Says where the tag came from, so the band is not mistaken for something
+    // the extension decided.
+    const alertSource = document.createElement('span');
+    alertSource.style.cssText = [
+      'margin-inline-start:auto', `font-size:${TYPE.overline}px`, 'letter-spacing:.05em',
+      'opacity:.6', 'flex:0 0 auto',
+    ].join(';');
+    alertSource.textContent = 'ON PAGE';
+
+    alertEl.appendChild(alertDot);
+    alertEl.appendChild(alertText);
+    alertEl.appendChild(alertSource);
+    alertSlot.appendChild(alertEl);
+    box.appendChild(alertSlot);
+    alertIn = window.slSlot(alertSlot, { axis: 'col', gap: STACK_GAP, duration: 0.44, bounce: 0.3 });
 
     const main = document.createElement('div');
-    main.style.cssText = `display:flex;align-items:stretch;gap:${MAIN_GAP}px;`;
+    main.style.cssText = 'display:flex;align-items:stretch;gap:0;';
 
-    // The buttons, the pane and the rail are one row at one height, so the
-    // block reads as a block: the buttons finish exactly where the pane does
-    // instead of stopping short of it.
+    // The buttons and the pane are one row at one height, so the block reads as
+    // a block: the buttons finish exactly where the pane does instead of
+    // stopping short of it.
     const row = document.createElement('div');
     row.style.cssText = [
       `flex:0 0 ${CONTROLS_WIDTH}px`, `width:${CONTROLS_WIDTH}px`, 'box-sizing:border-box',
       'display:flex', `gap:${PAIR_GAP}px`,
-      `height:${hasTranscript ? PANEL_HEIGHT : BUTTONS_SHORT}px`,
+      `height:${PANEL_HEIGHT}px`,
     ].join(';');
 
     const kill = actionButton('✕', 'kill-and-log',
-      'linear-gradient(180deg,#cf4436 0%,#a12d1e 100%)', killAndLog);
+      'linear-gradient(180deg,#d9503f 0%,#a02c1d 100%)',
+      '0 10px 20px rgba(190,50,40,.16)', killAndLog);
     const call = actionButton('▶', 'start-call',
-      'linear-gradient(180deg,#259954 0%,#146639 100%)', startCall);
+      'linear-gradient(180deg,#2aa55c 0%,#13623a 100%)',
+      '0 10px 20px rgba(30,140,80,.16)', startCall);
     row.appendChild(kill);
     row.appendChild(call);
     ctl = { kill, call, row };
+    // A press whose click is about to be ignored must not answer as though it
+    // was not, so the spring is gated on the same flag the click checks.
+    window.slPressable(kill, () => !busy);
+    window.slPressable(call, () => !busy);
 
     main.appendChild(row);
     if (hasTranscript) main.appendChild(buildTranscript());
     box.appendChild(main);
 
     // Under the whole box rather than inside the button column: a sentence
-    // reads better across the width than down 210px, and the row above keeps
+    // reads better across the width than down 214px, and the row above keeps
     // its full height instead of giving a third of it up to one word.
+    const statusRow = document.createElement('div');
+    statusRow.style.cssText = [
+      'display:flex', 'align-items:center', 'gap:7px',
+      `height:${STATUS_HEIGHT}px`, 'flex:0 0 auto',
+      'padding-inline-start:2px', 'box-sizing:border-box',
+      // Takes the box's width without setting it: "Stopped: Timed out waiting
+      // for element." must not be what decides how wide the plate is.
+      'width:0', 'min-width:100%',
+    ].join(';');
+
+    statusDot = document.createElement('span');
+    statusDot.style.cssText =
+      `width:5px;height:5px;border-radius:50%;background:${FG_DIM};flex:0 0 auto`;
+
     statusEl = document.createElement('div');
     statusEl.style.cssText = [
-      'flex:0 0 auto',
-      `height:${hasTranscript ? STATUS_ONE_LINE : STATUS_TWO_LINES}px`,
-      'box-sizing:border-box',
-      // Same trick as the alert banner above: takes the box's width without
-      // getting a say in it. Without this the box is only as wide as its widest
-      // child, and "Stopped: Timed out waiting for element. Finish manually."
-      // stretches the whole overlay — the buttons with it.
-      'width:0', 'min-width:100%',
-      // The bands above it are all shapes; this is bare text, so the space is
-      // the only thing separating it from the row.
-      `margin-block-start:${STATUS_GAP - STACK_GAP}px`,
-      'color:#e8e6e1', `line-height:${STATUS_LINE}px`, 'overflow-wrap:break-word',
-      // Two lines is the worst case, and a stray last word reads as a mistake.
-      'text-wrap:pretty',
-      'display:-webkit-box', `-webkit-line-clamp:${hasTranscript ? 1 : 2}`,
-      '-webkit-box-orient:vertical', 'overflow:hidden',
+      'flex:1 1 auto', 'min-width:0',
+      `font-size:${TYPE.read}px`, 'letter-spacing:-.005em', `color:${FG}`,
+      // One line, always. The tooltip carries whatever does not fit.
+      'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
     ].join(';');
     statusEl.textContent = 'Ready';
-    box.appendChild(statusEl);
+
+    statusRow.appendChild(statusDot);
+    statusRow.appendChild(statusEl);
+
+    // An overlay is not always built before the call it belongs to: toggling
+    // transcription rebuilds it, and a stale copy left by an extension reload
+    // is replaced the next time the page re-renders. So it opens on the state
+    // the page is actually in. Set here rather than through setCallLive()
+    // because that one announces to the panel, and a rebuild is not news.
+    if (lastCallState === 'IN_CALL') {
+      statusEl.textContent = 'Connected';
+      statusDot.style.background = CALL_LIVE;
+    }
+
+    // With no pane there is nowhere else for the call timer to live, so it
+    // takes the free end of the status line, opposite the word the dot and
+    // setCallLive() put at the other end.
+    if (!hasTranscript) {
+      timerEl = document.createElement('span');
+      timerEl.style.cssText = [
+        'margin-inline-start:auto', `font-size:${TYPE.read}px`, 'font-variant-numeric:tabular-nums',
+        'letter-spacing:-.01em', `color:${FG_MUTED}`, 'padding-inline-end:2px', 'flex:0 0 auto',
+      ].join(';');
+      timerEl.textContent = '00:00';
+      statusRow.appendChild(timerEl);
+    }
+
+    box.appendChild(statusRow);
 
     document.body.appendChild(box);
     overlayEl = box;
+    makeDraggable(box);
     renderOverlayAlert(window.__slContactAlert || null);
     // Last, and only once the box is in the document: it scrolls the list, and
     // scrollHeight is 0 until then. It also re-applies the rep's last minimise
@@ -705,10 +983,21 @@
   function renderTranscriptView() {
     if (!tx) return;
     const hidden = txView.minimized;
-    tx.pane.style.display = hidden ? 'none' : 'flex';
-    // The pane's own light goes with it, so the rail shows one in its place.
-    // Reserved either way, so the rail's buttons do not shift.
-    tx.railDot.style.visibility = hidden ? 'visible' : 'hidden';
+    // Minimising takes the reading away, not the controls: the list goes and
+    // the pane collapses onto its own header, which still carries the light,
+    // the timer, pause and save. The design draws the pane open only — it has
+    // no closed state — so this is the smallest thing that honours its shape
+    // without putting a control out of reach.
+    tx.list.style.display = hidden ? 'none' : '';
+    tx.hint.style.display = 'none';
+    // Width as well as height, or minimising would reclaim nothing: the wrapper
+    // stretches to the button row either way, so a pane that only lost its list
+    // would leave the plate exactly as wide as before. The label goes and the
+    // timer stays — a call in progress is still worth reading at a glance.
+    tx.pane.style.width = hidden ? `${PANE_MINI_WIDTH}px` : `${TRANSCRIPT_WIDTH}px`;
+    tx.pane.style.flexBasis = hidden ? `${PANE_MINI_WIDTH}px` : `${TRANSCRIPT_WIDTH}px`;
+    tx.pane.style.height = hidden ? 'auto' : `${PANEL_HEIGHT}px`;
+    tx.connection.style.display = hidden ? 'none' : '';
     tx.toggle.textContent = hidden ? '»' : '«';
     tx.toggle.title = hidden ? 'Show transcript' : 'Hide transcript';
     tx.toggle.setAttribute('aria-label', tx.toggle.title);
@@ -718,56 +1007,92 @@
     // was away leaves the view stale. Come back at the newest line.
     txView.autoScroll = true;
     tx.list.scrollTop = tx.list.scrollHeight;
-    tx.hint.style.display = 'none';
   }
 
   function buildTranscript() {
+    // The gap to the buttons lives on the wrapper rather than on the row, so
+    // that a future collapse animates one box's width and takes its own gap
+    // with it instead of leaving a hole.
     const wrap = document.createElement('div');
-    wrap.style.cssText = `display:flex;gap:${RAIL_GAP}px;align-items:stretch;`;
+    wrap.style.cssText = [
+      'overflow:hidden', 'box-sizing:border-box',
+      `padding-inline-start:${MAIN_GAP}px`, 'flex:0 0 auto',
+    ].join(';');
 
     const pane = document.createElement('div');
     pane.style.cssText = [
       'position:relative', `flex:0 0 ${TRANSCRIPT_WIDTH}px`, `width:${TRANSCRIPT_WIDTH}px`,
       `height:${PANEL_HEIGHT}px`, 'box-sizing:border-box',
       'display:flex', 'flex-direction:column',
-      'background:#141618', 'border:1px solid #3a3d42', 'border-radius:8px',
+      // The one inset surface on the plate: the transcript is a well cut into
+      // the glass, not another face sitting on it.
+      `background:${INSET_BG}`, `border:${INSET_BORDER}`, 'border-radius:11px',
+      `box-shadow:${INSET_SHADOW}`,
       'overflow:hidden',
     ].join(';');
 
+    // The header carries what the old rail carried, inside the pane it belongs
+    // to: the light, what it says, how long the call has run, and the three
+    // things a rep does to a running transcript.
     const bar = document.createElement('div');
     bar.style.cssText = [
-      'display:flex', 'align-items:center', 'gap:6px', 'padding:3px 8px',
-      'background:#26282c', 'border-bottom:1px solid #3a3d42', 'flex:0 0 auto',
+      'display:flex', 'align-items:center', `gap:${HEADER_GAP}px`, 'padding:5px 7px',
+      'background:rgba(255,255,255,.035)', 'border-bottom:1px solid rgba(255,255,255,.05)',
+      'flex:0 0 auto',
     ].join(';');
 
     const dot = document.createElement('span');
-    dot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:#6b6f76;flex:0 0 auto;';
+    dot.style.cssText =
+      `width:6px;height:6px;border-radius:50%;background:${FG_DIM};flex:0 0 auto`;
 
     const connection = document.createElement('span');
-    connection.style.cssText =
-      `font-weight:600;letter-spacing:.06em;font-size:${TYPE.overline}px;color:#9aa0a6;`;
+    connection.style.cssText = [
+      'font-weight:600', 'letter-spacing:.08em', `font-size:${TYPE.overline}px`,
+      `color:${FG_MUTED}`, 'flex:0 0 auto',
+    ].join(';');
     connection.textContent = 'OFFLINE';
 
     const timer = document.createElement('span');
-    timer.style.cssText =
-      `margin-inline-start:auto;font-variant-numeric:tabular-nums;color:#9aa0a6;font-size:${TYPE.caption}px;`;
+    timer.style.cssText = [
+      `font-size:${TYPE.caption}px`, 'font-variant-numeric:tabular-nums', `color:${FG_MUTED}`,
+      // Pushes the buttons to the far end, so the reading half and the acting
+      // half of the header sit at opposite edges.
+      'margin-inline-end:auto', 'margin-inline-start:2px', 'flex:0 0 auto',
+    ].join(';');
     timer.textContent = '00:00';
+    timerEl = timer;
+
+    const toggle = iconButton('«', 'Hide transcript', toggleTranscriptView);
+    const pause = iconButton('⏸', 'Pause transcription', togglePause);
+    const save = iconButton('↓', 'Save transcript as text', saveFromButton);
+    save.classList.add('sl-save');
 
     bar.appendChild(dot);
     bar.appendChild(connection);
     bar.appendChild(timer);
+    bar.appendChild(toggle);
+    bar.appendChild(pause);
+    bar.appendChild(save);
 
     const list = document.createElement('div');
+    // Selectable text, so it is not a drag handle: a drag starting in here
+    // would fight the selection the rep is trying to make.
+    list.setAttribute('data-sl-nodrag', '');
     list.style.cssText = [
       // Fills whatever the fixed pane height leaves: the pane is the size it is
       // whether the call has said one word or four hundred.
-      'flex:1 1 auto', 'min-height:0', 'overflow-y:auto', 'padding:6px 8px',
+      'flex:1 1 auto', 'min-height:0', 'overflow-y:auto', 'padding:7px 9px',
       // Read out of the corner of the eye mid-sentence, so it stays larger and
-      // higher-contrast than the rest of the overlay.
-      `font-size:${TYPE.read}px`, `line-height:${LEADING.read}`, 'user-select:text', 'cursor:text',
+      // higher-contrast than the rest of the plate.
+      `font-size:${TYPE.read}px`, `line-height:${LEADING.read}`, `color:${FG}`,
+      'user-select:text', 'cursor:text',
       // A prospect's sentence wraps to three lines often enough that an orphan
       // on the last one is the normal case, not the edge one.
       'overflow-wrap:break-word', 'text-wrap:pretty',
+      // The top line fades under the header instead of being guillotined by it,
+      // which is what says the list continues upward.
+      '-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 8px,#000 100%)',
+      'mask-image:linear-gradient(180deg,transparent 0,#000 8px,#000 100%)',
     ].join(';');
 
     const empty = emptyLine('Waiting for the call to start…');
@@ -779,8 +1104,10 @@
     hint.textContent = '↓ New text';
     hint.style.cssText = [
       'display:none', 'position:absolute', 'inset-inline-end:8px', 'bottom:6px',
-      'background:#3a3d42', 'color:#e8e6e1', 'border:none', 'border-radius:10px',
-      'padding:2px 8px', `font-size:${TYPE.overline}px`, 'cursor:pointer', 'font-family:inherit',
+      'background:rgba(255,255,255,.14)', `color:${FG}`, 'border:1px solid rgba(255,255,255,.12)',
+      'border-radius:10px', 'padding:2px 8px', `font-size:${TYPE.overline}px`,
+      'cursor:pointer', 'font-family:inherit',
+      'backdrop-filter:blur(8px)', '-webkit-backdrop-filter:blur(8px)',
       'box-shadow:0 2px 6px rgba(0,0,0,.4)',
     ].join(';');
     hint.addEventListener('click', () => {
@@ -800,43 +1127,11 @@
     pane.appendChild(bar);
     pane.appendChild(list);
     pane.appendChild(hint);
-
-    // The rail outlives the pane: minimising takes the reading away, not the
-    // controls, so this column is the same whether the pane is there or not.
-    const rail = document.createElement('div');
-    rail.style.cssText = [
-      'position:relative',
-      'display:flex', 'flex-direction:column', 'align-items:center',
-      // The five buttons are centred against the pane they belong to, evenly
-      // spaced and evenly inset top and bottom.
-      'justify-content:center', `gap:${RAIL_ICON_GAP}px`,
-      'flex:0 0 auto', `height:${PANEL_HEIGHT}px`,
-    ].join(';');
-
-    // Out of the flow deliberately: in it, the light would hold a slot at the
-    // top that is empty whenever the pane is showing, pushing the buttons down
-    // and leaving the rail looking bottom-heavy against the pane.
-    const railDot = document.createElement('span');
-    railDot.style.cssText = [
-      'visibility:hidden', 'position:absolute', 'top:0', 'left:50%',
-      'transform:translateX(-50%)',
-      'width:6px', 'height:6px', 'border-radius:50%', 'background:#6b6f76',
-    ].join(';');
-
-    const toggle = iconButton('«', 'Hide transcript', toggleTranscriptView);
-    const pause = iconButton('⏸', 'Pause transcription', togglePause);
-    const save = iconButton('↓', 'Save transcript as text', saveFromButton);
-    rail.appendChild(railDot);
-    rail.appendChild(toggle);
-    rail.appendChild(pause);
-    rail.appendChild(iconButton('⧉', 'Copy transcript', copyTranscript));
-    rail.appendChild(save);
-    rail.appendChild(iconButton('✕', 'Clear transcript', clearTranscript));
-
     wrap.appendChild(pane);
-    wrap.appendChild(rail);
 
-    tx = { pane, list, empty, dot, connection, timer, hint, railDot, toggle, pause, save };
+    for (const b of [toggle, pause, save]) window.slPressable(b);
+
+    tx = { pane, list, empty, dot, connection, timer, hint, toggle, pause, save };
     // A rebuild (settings toggle, or replacing a stale overlay) must not lose
     // what is already on screen.
     const shown = txView.entries.slice(-MAX_RENDERED_LINES);
@@ -863,11 +1158,17 @@
     }
 
     const line = document.createElement('div');
-    line.style.cssText = 'margin-bottom:5px;';
+    // Each line rises in rather than blinking on. A transcript arrives while
+    // the rep is listening, not looking, so movement in the corner of the eye
+    // is what says a new line landed. Stopped under reduced motion by the rule
+    // in overlayStyle().
+    line.className = 'sl-line';
+    line.style.cssText =
+      `margin-bottom:7px;animation:sl-line .3s ${EASE_OUT} both;`;
 
     const time = document.createElement('span');
     time.style.cssText =
-      `color:#9aa0a6;font-size:${TYPE.caption}px;font-variant-numeric:tabular-nums;margin-inline-end:5px;`;
+      `color:${FG_MUTED};font-size:${TYPE.caption}px;font-variant-numeric:tabular-nums;margin-inline-end:6px;`;
     time.textContent = window.slFormatClock(entry.start);
     if (entry.merged > 1) {
       // Coalesced under backpressure: the speech is all there, the timestamps
@@ -926,11 +1227,11 @@
     tx.connection.textContent = labels[state] || 'OFFLINE';
     tx.connection.style.color = live ? '#e8e6e1' : '#9aa0a6';
     tx.dot.style.background = colors[state] || '#6b6f76';
-    tx.dot.style.animation = live ? 'sl-pulse 1.6s ease-in-out infinite' : 'none';
-    // Same state, on the one indicator that survives minimising.
-    tx.railDot.style.background = tx.dot.style.background;
-    tx.railDot.style.animation = tx.dot.style.animation;
-    tx.railDot.title = `Transcription: ${tx.connection.textContent}`;
+    // The rail is gone — the light now lives in the pane header, which stays
+    // put when the reading is minimised, so there is nothing to mirror it onto.
+    tx.dot.style.animation =
+      live && !window.slReducedMotion() ? 'sl-pulse 1.6s ease-in-out infinite' : 'none';
+    tx.dot.title = `Transcription: ${tx.connection.textContent}`;
   }
 
   function renderPaused() {
@@ -1026,9 +1327,11 @@
   function startTranscriptTimer() {
     if (txView.timerHandle) return;
     txView.startedAt = Date.now();
-    if (tx) tx.timer.textContent = '00:00';
+    if (timerEl) timerEl.textContent = '00:00';
     txView.timerHandle = setInterval(() => {
-      if (tx) tx.timer.textContent = window.slFormatClock((Date.now() - txView.startedAt) / 1000);
+      // timerEl is the pane header's timer with transcription on and the status
+      // line's with it off — the call is timed either way.
+      if (timerEl) timerEl.textContent = window.slFormatClock((Date.now() - txView.startedAt) / 1000);
     }, 1000);
   }
 
@@ -1101,6 +1404,7 @@
     if (result.state === lastCallState) return;
     lastCallState = result.state;
     safeSend({ type: 'call-state', state: result.state, tier: result.tier });
+    setCallLive(result.state === 'IN_CALL');
 
     // The transcript pane follows the call it is transcribing. This is still
     // observation only — nothing below clicks anything.

@@ -42,6 +42,13 @@ for (const button of actionButtons) {
   button.addEventListener('click', () => send(button.dataset.action));
 }
 
+// The press, on the same spring the on-page plate uses, so a button answers
+// identically whichever surface the rep is looking at. Springs write an inline
+// transform, which is why panel.html transitions colour only.
+for (const button of [...actionButtons, els.pause, els.copy, els.save, els.clear, els.scrollHint]) {
+  if (button) self.slPressable(button);
+}
+
 // Anything the panel has to say replaces the opening line, so the opening line
 // is only rewritten while it is still the opening line.
 let statusPristine = true;
@@ -65,12 +72,14 @@ function renderKeys() {
   for (const button of actionButtons) {
     const action = button.dataset.action;
     // The rep's own binding reaches this window and the Salesloft page;
-    // Chrome's reaches any tab. Either can be missing, and binding the key
-    // Chrome already has makes them the same key said twice.
+    // Chrome's reaches any tab. The sub-line shows the rep's, and falls back to
+    // Chrome's only when they have none — same rule as the on-page plate, and
+    // for the same reason: Chrome usually holds one of the two actions and not
+    // the other, so printing both made a rebound pair read as mismatched. The
+    // tooltip below still names both.
     const own = self.slHotkeyLabel(hotkeys[action], false);
     const anywhere = self.slHotkeyLabel(commandKeys[action], false);
-    const keys = [own, anywhere].filter((key, i, all) => key && all.indexOf(key) === i);
-    button.querySelector('.sub').textContent = keys.join('  ·  ') || 'Not bound';
+    button.querySelector('.sub').textContent = own || anywhere || 'Not bound';
 
     const said = [];
     if (own) said.push(`${own} here and on the Salesloft page`);
@@ -320,6 +329,11 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'transcript-unsaved') offerSave();
 
   if (msg.type === 'call-state') {
+    // The same light the on-page plate shows, for the rep working from the
+    // panel on a second monitor. The status text arrives on its own, relayed
+    // from the page as an ordinary status message.
+    const dot = document.querySelector('.status-dot');
+    if (dot) dot.classList.toggle('live', msg.state === 'IN_CALL');
     if (msg.state === 'IN_CALL') {
       startTimer();
       const empty = document.getElementById('empty');

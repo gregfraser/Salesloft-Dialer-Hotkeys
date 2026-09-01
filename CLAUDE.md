@@ -80,7 +80,7 @@ Manual, against the live Salesloft app:
 
 1. `chrome://extensions` → Developer mode → **Load unpacked** → select `extension/`.
 2. After editing `background.js`, `manifest.json` or `call-detect.js`: reload the extension card.
-3. After editing `content.js`, `alerts.js` or `defaults.js`: reload the extension **and** refresh the `app.salesloft.com` tab — `defaults.js` is a content script too, so the page keeps running the old copy until it reloads.
+3. After editing `content.js`, `alerts.js`, `defaults.js` or `spring.js`: reload the extension **and** refresh the `app.salesloft.com` tab — `defaults.js` and `spring.js` are content scripts too, so the page keeps running the old copies until it reloads.
 4. After editing `offscreen.js` or `pcm-worklet.js`: reload the extension and restart capture (`Ctrl+Shift+8` twice) — the offscreen document is only recreated on the next capture.
 5. After editing `panel.*` or `settings.*`: close and reopen that window/popup.
 
@@ -94,6 +94,7 @@ Four execution contexts in Chrome plus one Python process. Understanding any fea
 - **`call-detect.js`** — call-state detection, **observe only**. Takes its DOM access as injected functions (`elements`, `isVisible`) so it is testable without a DOM.
 - **`alerts.js`** — reads the Disposition / Sentiment tags already on the contact's page, **read only**. It renders nothing of its own: the colour-coded alert shows in the floating panel (via a `contact-alert` message) and as a subtle line inside the on-page overlay (via the `window.__slOnContactAlert` hook `content.js` registers in their shared isolated world). `content.js` also reads `window.__slContactAlert` for its status line.
 - **`offscreen.js`** + **`pcm-worklet.js`** — hidden document holding the `AudioContext`, the mandatory passthrough, the downsampler and the WebSocket. MV3 service workers terminate after ~30s and cannot hold `MediaStream`s, which is why this exists.
+- **`spring.js`** — the one motion primitive, loaded by all three UI surfaces (content script via the manifest, panel and settings via a `<script>` tag). A single rAF loop over springs that add themselves when they have somewhere to go and drop out when they settle, so an idle plate costs no frames. Ported from the design prototype rather than reimplemented. Exports `slSpring`, `slPressable`, `slSlot` and the drag maths (`slBand`, `slProject`, `slClamp`, `slMix`, `slReducedMotion`).
 - **`panel.*`** / **`settings.*`** — thin UIs.
 - **`server/`** — `main.py` (FastAPI + session), `vad.py` (Silero + `Endpointer`), `transcription.py` (`UtteranceQueue`, filters, metrics), `websocket.py` (protocol), `audio.py`, `config.py`.
 
@@ -136,8 +137,20 @@ from `chrome.commands.getAll()` — never from the manifest's `suggested_key`,
 which is only a suggestion Chrome is free to ignore. A keycap appears only for a
 key that actually does something, so an action with neither reads as unbound
 rather than claiming a shortcut the rep does not have. `slHotkeyLabel()` has a
-compact form for the keycaps, where two of them share the 210px column, and a
+compact form for the keycaps, where two of them share the 214px column, and a
 full one for the popup.
+
+**One key per button, and it is the rep's own.** The overlay's keycap and the
+panel's sub-line show the binding from storage, and fall back to
+`chrome.commands.getAll()` only for an action that has no binding of its own.
+Both used to show at once, and the pair stopped reading as a pair the moment the
+rep rebound anything: Chrome takes the suggested keys it can get and silently
+drops the ones already claimed, so it typically holds one of the two actions and
+not the other — rebind to F11/F12 and one button reads "F11 Ctrl⇧9" while its
+neighbour reads "F12". The eye lands on the difference rather than the keys. The
+button is a reminder of what is under the hand; the `title` on both surfaces
+still names both keys and says where each works, and the popup remains the full
+account of what Chrome actually has.
 
 Transcription deliberately has no binding of its own: capture arming makes a
 page keypress able to stop capture but never to reliably start it (see
@@ -183,8 +196,59 @@ When Salesloft ships UI changes, these are what break.
 - A `busy` flag serializes flows; hotkeys and clicks are ignored while one runs.
 - In-page key bindings are suppressed while typing (`isTyping()`) — which is what makes a bare letter a usable binding at all — and ignore auto-repeat, so a held key cannot queue flows behind `busy`.
 - **The keys on the buttons are read back, never assumed.** The overlay and the panel print the rep's binding and whatever `chrome.commands.getAll()` reports, and print nothing for an action that has neither. Hard-coding `Ctrl⇧9` there is how the buttons came to claim a shortcut Chrome had left unassigned.
-- **The overlay never moves or resizes with its content.** It is pinned bottom-left and stacked as three bands: the contact alert, the row, the status. The row carries everything the rep aims at — the button column a fixed 210px, the transcript pane a fixed 280px, and buttons, pane and rail all exactly `PANEL_HEIGHT`, so the three finish on the same line and transcript lines scroll rather than push anything around. The status is a full-width line **below** that row rather than a slice of the button column: a sentence reads better across the box than down 210px, and down there it has nothing to push. Its height is **reserved, not measured** — one line beside a transcript, where the box is wide enough for any status we write, two without one, and the tooltip carries the rest — which is what stops a long "Stopped: …" from shoving the buttons upward. The buttons stretch **vertically** to meet the pane and never widen: the pair keeps the column's width and splits it, so their left/right positions are identical with the transcript on, off or folded away. The contact alert is the one part that comes and goes on its own, so it is a full-width banner **above** that row — the overlay is anchored at its foot, so the banner grows the box upward and moves nothing (`width:0;min-width:100%` stops a long tag deciding the overlay's width). Hover and press effects are `filter`/`transform` only, for the same reason — a `scale()` press does not touch layout. Those states are written in cascade order in `overlayStyle()` — hover, then press, then `sl-busy`, then reduced-motion — because they are all the same specificity, so the later rule is the one that wins: the press has to beat the hover it happens under, a press being thrown away by `busy` has to beat both, and reduced motion drops the movement while leaving the colour to answer. Reordering them is how that silently breaks. The rail's live dot is positioned out of the flow for the same reason: in it, it would hold a slot that is empty whenever the pane is showing. **Sizes come from `TYPE` and gaps from the 2× rule.** `TYPE` is four sizes named for their use (`action` 13, `read` 12, `caption` 11, `overline` 10) and nothing is set off it — `STATUS_LINE` is derived from `TYPE.read` so the reserve and the leading cannot drift apart. Gaps encode grouping: 6 inside a group (the button pair, the pane and its rail), 12 between them, because space only groups when the outer gap is at least twice the inner one. The status is the exception that needs `STATUS_GAP` on top — every other band is a shape of its own (a tinted banner, filled buttons, a bordered pane) and the shape does the grouping, but the status is bare text on the box. Nothing else resizes the overlay but a deliberate click: transcription on or off (which adds the pane and the taller buttons), and minimising the pane (width only).
-- **Minimising hides the pane, not the transcript.** The rail survives it, so pause/copy/save/clear and a live indicator stay reachable and no captured line is lost; capture itself is untouched. The flag lives in `txView` rather than storage, so it survives an overlay rebuild (a settings toggle, a stale copy being replaced) but not a page reload.
+- **The plate can be dragged, but it still never moves or resizes with its *content*.** It starts
+  bottom-left and the rep can throw it anywhere; the position is a `transform` offset persisted in
+  `chrome.storage.local` — local, never `sync`, because it is a position on this monitor — rubber-banded
+  while dragging, carried to rest by a spring holding the release velocity, and re-clamped on resize so a
+  smaller window can never strand it off screen. Everything the rep aims at is still a fixed size: the
+  button column 214px, the transcript pane 308px, both exactly `PANEL_HEIGHT`, so the two finish on the
+  same line and transcript lines scroll rather than push anything around. The status is a reserved
+  one-line strip **below** that row — a sentence reads better across the plate than down 214px — and it
+  ellipsises with the whole of a long "Stopped: …" in the tooltip, which is what stops it resizing
+  anything (`width:0;min-width:100%` keeps a long line from deciding the plate's width). With
+  transcription off the timer moves into the free end of that strip.
+- **The status strip is the one place two paths write, so the order between them is fixed.** The click
+  path owns it — a flow's "Ending call…" and its "Stopped: … Finish manually." are the rep's only
+  account of a call that may now be half-logged. The detection path adds `setCallLive()`: the dot goes
+  green and the line reads "Connected" while `call-detect` sees a call, which is what the climbing timer
+  beside it had been asserting wordlessly. It is guarded on `busy` for exactly that reason, so it can
+  never overwrite a flow mid-way. `buildOverlay()` re-applies the same state directly rather than through
+  `setCallLive()` — an overlay rebuilt mid-call (a settings toggle, a stale copy being replaced) must
+  open on "Connected" rather than "Ready", but a rebuild is not news and must not re-announce to the
+  panel. The panel mirrors the dot off the `call-state` message it already handles, and takes the text as
+  an ordinary relayed status.
+- **The contact tag is the one thing allowed to move the layout, and that is deliberate.** It holds
+  **no** space until the page scan reports one, then springs the plate open (`slSlot`, a lazily measured
+  `scrollHeight` with a negative margin cancelling the stack gap while closed). This reverses the older
+  reserved-band rule and supersedes `plans/001-contact-alert-entrance.md` in the design bundle, which
+  specified the opposite. The grounds: the scan lands before the rep has decided to dial, so the movement
+  is over well before the aim — and a permanently reserved band is ~20px of empty plate on every contact
+  that has no tag, which is most of them.
+- **Springs and CSS transitions must never share a property.** `spring.js` writes an inline `transform`;
+  a `transition: transform` on the same element would ease toward each spring frame, so the motion
+  arrives late and overshoots twice. `overlayStyle()`, `panel.html` and `settings.html` therefore
+  transition colour and `filter` only — colour is safe precisely because it has no velocity to hand off.
+  For the same reason there are no `:active{transform:…}` rules left; the press is `slPressable`, gated on
+  `busy` so a click that is about to be ignored does not answer as though it was not. Reduced motion is
+  handled inside `spring.js` (checked on every `to()`, not captured once, so the rep can change the OS
+  setting without reloading the tab); all the stylesheets still have to stop is the looping LIVE dot and
+  the line entrance.
+- **Sizes come from `TYPE`, and there are three elevations.** `TYPE` is five sizes named for their use
+  (`action` 15, `read` 13, `alert` 12, `caption` 11, `overline` 10) and nothing is set off it. Gaps encode
+  grouping: 6 inside the button pair, 10 from the pair to the pane, 8 down the stack. The surface
+  vocabulary is shared by all three UIs and is the whole visual system: the plate floats (translucent,
+  `backdrop-filter` blurred — the blur is load-bearing, without it the alpha reads as a washed-out solid),
+  a **raised** face sits on it (`rgba(255,255,255,.045)` + hairline border + inset top highlight), and an
+  **inset** well is cut into it (`#0f1113` + inset shadow) for the transcript and every form field.
+  Nothing in this UI is flat.
+- **Minimising hides the reading, not the transcript.** The old rail beside the pane is gone — its
+  controls now live in the pane's own header — so minimising collapses the pane onto that header rather
+  than away entirely, and the light, the timer, the toggle, pause and save all stay reachable while no
+  captured line is lost; capture itself is untouched. The design prototype draws the pane open only and
+  collapses it to zero width, which would take the restore control with it; collapsing to the header is
+  the smallest thing that keeps its shape without putting a control out of reach. The flag lives in
+  `txView` rather than storage, so it survives an overlay rebuild (a settings toggle, a stale copy being
+  replaced) but not a page reload.
 - **Nothing renders over the Salesloft page.** The contact alert appears only in the floating panel and as the tinted line inside the overlay (`window.__slOnContactAlert`); do not bring back a floating toast.
 - **The overlay belongs to a contact, not to Salesloft.** It is drawn only where one person is on screen — `slIsContactUrl()` in `defaults.js` matches the route (`/app/people/{id}` and friends, never the People list), and `content.js` falls back to the DOM (`[data-testid="popout-logger-container"]`, `person-detail*`) so the logger popout keeps the buttons wherever the rep dialled from. Salesloft is a single-page app, so `syncOverlay()` re-decides on every re-render rather than once at injection, and it never removes the overlay while `busy` — a flow mid-way through logging a call keeps its status line.
 

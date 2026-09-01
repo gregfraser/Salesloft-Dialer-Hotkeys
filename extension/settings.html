@@ -3,179 +3,292 @@
 <head>
   <meta charset="utf-8" />
   <style>
+    /* Same three elevations as the on-page plate and the floating panel: the
+       popup is the ground, a raised card sits on it, an inset field is cut into
+       it. Rows live inside cards separated by hairlines rather than floating on
+       the background with a rule under each — the card is what says "these
+       three settings belong together". */
+    :root {
+      --bg: #141618;
+      --raised: rgba(255, 255, 255, .045);
+      --raised-border: rgba(255, 255, 255, .07);
+      --raised-top: inset 0 1px 0 rgba(255, 255, 255, .06);
+      --inset: #0f1113;
+      --inset-border: rgba(255, 255, 255, .08);
+      --inset-shadow: inset 0 2px 5px rgba(0, 0, 0, .5);
+      --hair: rgba(255, 255, 255, .06);
+
+      --text: #e8e6e1;
+      --soft: #c9c6c0;
+      --muted: #9aa0a6;
+      --dim: #6b6f76;
+      --ok: #a8e6b8;
+      --err: #ffb4a8;
+      --warn: #ffd88a;
+      --focus: rgba(47, 111, 208, .7);
+    }
+    * { box-sizing: border-box; }
     body {
-      width: 290px;
+      width: 332px;
       margin: 0;
       padding: 14px;
-      background: #1c1e21;
-      color: #e8e6e1;
+      background: var(--bg);
+      color: var(--text);
       font-family: system-ui, sans-serif;
       font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
     }
-    h1 { font-size: 13px; margin: 0 0 12px; font-weight: 600; letter-spacing: .02em; }
+
+    h1 {
+      font-size: 14px;
+      margin: 0;
+      font-weight: 600;
+      letter-spacing: -.012em;
+      padding-inline-start: 2px;
+    }
+    /* Section labels sit outside the cards, small and wide-tracked, so they
+       read as headings rather than as another row. */
     h2 {
-      font-size: 11px; margin: 16px 0 4px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: .06em; color: #9aa0a6;
+      font-size: 10px;
+      margin: 5px 0 -2px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      color: var(--dim);
+      padding-inline-start: 3px;
     }
+
+    .group {
+      display: flex;
+      flex-direction: column;
+      border-radius: 12px;
+      background: var(--raised);
+      border: 1px solid var(--raised-border);
+      box-shadow: var(--raised-top);
+      overflow: hidden;
+    }
+    .hair { height: 1px; background: var(--hair); }
+
     .setting {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      align-items: flex-start;
       gap: 10px;
-      padding: 8px 0;
-      border-bottom: 1px solid #2c2f34;
+      padding: 10px 11px;
     }
-    .setting:has(+ .footer) { border-bottom: none; }
-    .name { flex: 1; }
+    /* A row whose control is a single-line field centres against it; a row with
+       a two-line hint aligns to the top or the switch drifts down the block. */
+    .setting.center { align-items: center; }
+    .name { flex: 1; min-width: 0; }
     .hint {
-      display: block; opacity: .55; font-size: 11px; margin-top: 2px;
+      display: block; color: var(--muted); font-size: 11px; margin-top: 2px;
       /* These run to three lines; anything that wraps that far needs 1.4+. */
       line-height: 1.4; text-wrap: pretty;
     }
     .setting.stacked { display: block; }
-    .setting.stacked select { width: 100%; margin-top: 6px; }
+    .setting.stacked select { width: 100%; margin-top: 7px; }
 
     /* toggle switch */
     .switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider {
       position: absolute; inset: 0; cursor: pointer;
-      background: #3a3d42; border-radius: 20px; transition: .15s;
+      background: #3a3d42; border-radius: 999px;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, .45);
+      transition: background-color .18s ease;
     }
     .slider::before {
       content: ""; position: absolute; height: 14px; width: 14px;
-      left: 3px; top: 3px; background: #e8e6e1; border-radius: 50%; transition: .15s;
+      left: 3px; top: 3px; background: var(--text); border-radius: 50%;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+      transition: transform .22s cubic-bezier(.23, 1, .32, 1);
     }
     input:checked + .slider { background: #1e7e46; }
     input:checked + .slider::before { transform: translateX(16px); }
+    .switch input:focus-visible + .slider { outline: 2px solid #8ab4f8; outline-offset: 2px; }
 
-    input[type="text"] {
-      width: 110px; padding: 5px 8px; border: 1px solid #3a3d42;
-      border-radius: 6px; background: #26282c; color: #e8e6e1; font-size: 12px;
+    /* Fields are cut into the card, never raised on it. */
+    input[type="text"], select, textarea {
+      padding: 6px 9px;
+      border: 1px solid var(--inset-border);
+      border-radius: 8px;
+      background: var(--inset);
+      box-shadow: var(--inset-shadow);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
     }
-    select {
-      padding: 5px 8px; border: 1px solid #3a3d42; border-radius: 6px;
-      background: #26282c; color: #e8e6e1; font-size: 12px;
+    input[type="text"] { width: 112px; flex: 0 0 auto; }
+    input[type="text"]:focus, select:focus, textarea:focus {
+      border-color: var(--focus);
+      outline: none;
     }
     .setting.stacked textarea {
-      width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical;
-      min-height: 46px; padding: 5px 8px; border: 1px solid #3a3d42;
-      border-radius: 6px; background: #26282c; color: #e8e6e1;
-      font-family: inherit; font-size: 12px;
+      width: 100%; margin-top: 7px; resize: vertical;
+      min-height: 46px; line-height: 1.4;
     }
-    .swatches { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
+    .swatches { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
     .swatch {
       padding: 2px 8px; border-radius: 999px; border: 1px solid;
       font-size: 11px; font-weight: 600; white-space: nowrap;
     }
+
     .notice {
-      margin-top: 8px; padding: 8px; border-radius: 6px;
-      background: #26282c; border: 1px solid #3a3d42;
-      font-size: 11px; line-height: 1.45; color: #c9c6c0; text-wrap: pretty;
+      padding: 10px 11px; border-radius: 11px;
+      background: rgba(255, 255, 255, .035);
+      border: 1px solid var(--raised-border);
+      font-size: 11px; line-height: 1.45; color: var(--soft); text-wrap: pretty;
     }
-    .notice strong { color: #e8e6e1; }
-    .notice p { margin: 0 0 6px; }
+    .notice strong { color: var(--text); }
+    .notice p { margin: 0 0 7px; }
     .notice p:last-child { margin-bottom: 0; }
+    /* Amber, the same colour every "read this before you act" state in this
+       extension uses. */
+    .notice.amber {
+      background: rgba(184, 134, 11, .1);
+      border-color: rgba(184, 134, 11, .35);
+      color: var(--warn);
+      border-radius: 9px;
+      padding: 9px 10px;
+    }
+    .notice.amber strong { color: #ffe6b8; }
 
     /* key bindings — the field is a button that records the next key pressed */
     .keys { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
     button.key {
-      min-width: 88px; max-width: 132px; padding: 5px 8px;
-      border: 1px solid #3a3d42; border-radius: 6px;
-      background: #26282c; color: #e8e6e1;
+      min-width: 88px; max-width: 132px; padding: 6px 9px;
+      border: 1px solid var(--inset-border); border-radius: 8px;
+      background: var(--inset); box-shadow: var(--inset-shadow); color: var(--text);
       font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
     }
-    button.key:hover { border-color: #5a5e66; }
-    button.key.unset { color: #9aa0a6; font-weight: 400; }
-    /* Amber, the same colour every "waiting on you" state in this extension
-       uses, and the only thing on screen that is asking for something. */
+    button.key:hover { border-color: rgba(255, 255, 255, .2); }
+    button.key.unset { color: var(--muted); font-weight: 400; }
+    /* Amber again, and the only thing on screen asking for something. */
     button.key.recording {
-      border-color: #b8860b; background: #3a3320; color: #ffd88a; font-weight: 400;
+      border-color: rgba(184, 134, 11, .65);
+      background: rgba(184, 134, 11, .18);
+      color: var(--warn);
+      font-weight: 400;
     }
     button.key-clear {
-      width: 22px; height: 22px; padding: 0; flex-shrink: 0;
-      border: 1px solid #3a3d42; border-radius: 6px;
-      background: none; color: #9aa0a6; font-size: 11px; line-height: 1; cursor: pointer;
+      width: 24px; height: 24px; padding: 0; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(255, 255, 255, .09); border-radius: 7px;
+      background: rgba(255, 255, 255, .05); color: var(--muted);
+      font-size: 10px; line-height: 1; cursor: pointer; font-family: inherit;
+      transition: background-color 160ms ease, color 160ms ease;
     }
-    button.key-clear:hover { border-color: #5a5e66; color: #e8e6e1; }
+    button.key-clear:hover { background: rgba(255, 255, 255, .12); color: var(--text); }
+
     /* Below the rows, so a note can never move the key the rep just clicked.
        The reserve is for what is under it: two lines covers every message
        here, so the notice does not jump when one appears. */
     #keybind-note {
-      font-size: 11px; line-height: 1.4; color: #9aa0a6;
-      min-height: 30px; margin-top: 6px; text-wrap: pretty;
+      font-size: 11px; line-height: 1.4; color: var(--muted);
+      min-height: 30px; text-wrap: pretty; padding-inline-start: 3px;
     }
-    #chrome-shortcuts { margin: 6px 0 0; padding-inline-start: 15px; }
-    #chrome-shortcuts li { margin-top: 3px; }
-    #chrome-shortcuts .unset { color: #9aa0a6; }
-    .footer { margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    #chrome-shortcuts { margin: 7px 0 0; padding: 0; list-style: none; }
+    #chrome-shortcuts li {
+      display: flex; gap: 8px; align-items: baseline; margin-top: 4px;
+    }
+    #chrome-shortcuts .unset { color: var(--muted); }
+
+    .footer { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
     .footer button {
-      background: none; border: 1px solid #3a3d42; color: #e8e6e1;
-      border-radius: 6px; padding: 5px 10px; font-size: 11px; cursor: pointer;
+      background: rgba(255, 255, 255, .05);
+      border: 1px solid rgba(255, 255, 255, .1);
+      color: var(--text);
+      border-radius: 8px; padding: 6px 11px; font-size: 11px; cursor: pointer;
+      font-family: inherit;
+      transition: background-color 160ms ease;
     }
-    .footer button:hover { border-color: #5a5e66; }
-    #saved { font-size: 11px; color: #a8e6b8; opacity: 0; transition: opacity .2s; }
-    #server-state { font-size: 11px; margin-top: 6px; min-height: 14px; color: #9aa0a6; }
-    #server-state.ok { color: #a8e6b8; }
-    #server-state.err { color: #ffb4a8; }
-    .disabled-group { opacity: .45; pointer-events: none; }
+    .footer button:hover { background: rgba(255, 255, 255, .12); }
+    #saved { margin-inline-start: auto; font-size: 11px; color: var(--ok); opacity: 0; transition: opacity .18s ease; }
+
+    /* The server line reads as a status pill rather than a sentence loose in
+       the card. */
+    #server-state:not(:empty) {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-top: 9px;
+      padding: 3px 9px; border-radius: 999px;
+      background: rgba(255, 255, 255, .05);
+      border: 1px solid rgba(255, 255, 255, .12);
+      font-size: 11px; font-weight: 600; color: var(--muted);
+    }
+    #server-state.ok { background: rgba(30, 126, 70, .16); border-color: rgba(30, 126, 70, .5); color: var(--ok); }
+    #server-state.err { background: rgba(217, 80, 63, .16); border-color: rgba(217, 80, 63, .5); color: var(--err); }
+
+    /* A group whose switch is off dims and stops taking clicks; its switch
+       stays live, because that is how the rep turns it back on. */
+    .disabled-group { opacity: .4; pointer-events: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .slider, .slider::before, #saved, button.key, .footer button { transition: none; }
+    }
   </style>
 </head>
 <body>
   <h1>Dialer Hotkeys</h1>
 
-  <div class="setting">
-    <div class="name">
-      Floating panel
-      <span class="hint">Detached window, drag it anywhere</span>
+  <div class="group">
+    <div class="setting">
+      <div class="name">
+        Floating panel
+        <span class="hint">Detached window, drag it anywhere</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="floatingPanel" />
+        <span class="slider"></span>
+      </label>
     </div>
-    <label class="switch">
-      <input type="checkbox" id="floatingPanel" />
-      <span class="slider"></span>
-    </label>
-  </div>
-
-  <div class="setting">
-    <div class="name">
-      Buttons on Salesloft page
-      <span class="hint">Overlay in the bottom-left corner</span>
+    <div class="hair"></div>
+    <div class="setting">
+      <div class="name">
+        Buttons on Salesloft page
+        <span class="hint">Overlay in the bottom-left corner</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="pageOverlay" />
+        <span class="slider"></span>
+      </label>
     </div>
-    <label class="switch">
-      <input type="checkbox" id="pageOverlay" />
-      <span class="slider"></span>
-    </label>
-  </div>
-
-  <div class="setting">
-    <div class="name">
-      Disposition
-      <span class="hint">Must match dropdown text exactly</span>
+    <div class="hair"></div>
+    <div class="setting center">
+      <div class="name">
+        Disposition
+        <span class="hint">Must match dropdown text exactly</span>
+      </div>
+      <input type="text" id="disposition" />
     </div>
-    <input type="text" id="disposition" />
   </div>
 
   <h2>Key bindings</h2>
 
-  <div class="setting">
-    <div class="name">
-      End call &amp; log
-      <span class="hint">The red ✕ button</span>
+  <div class="group">
+    <div class="setting center">
+      <div class="name">
+        End call &amp; log
+        <span class="hint">The red ✕ button</span>
+      </div>
+      <div class="keys">
+        <button class="key" data-record="kill-and-log"></button>
+        <button class="key-clear" data-clear="kill-and-log" title="Clear this key">✕</button>
+      </div>
     </div>
-    <div class="keys">
-      <button class="key" data-record="kill-and-log"></button>
-      <button class="key-clear" data-clear="kill-and-log" title="Clear this key">✕</button>
-    </div>
-  </div>
-
-  <div class="setting">
-    <div class="name">
-      Start the next call
-      <span class="hint">The green ▶ button</span>
-    </div>
-    <div class="keys">
-      <button class="key" data-record="start-call"></button>
-      <button class="key-clear" data-clear="start-call" title="Clear this key">✕</button>
+    <div class="hair"></div>
+    <div class="setting center">
+      <div class="name">
+        Start the next call
+        <span class="hint">The green ▶ button</span>
+      </div>
+      <div class="keys">
+        <button class="key" data-record="start-call"></button>
+        <button class="key-clear" data-clear="start-call" title="Clear this key">✕</button>
+      </div>
     </div>
   </div>
 
@@ -197,68 +310,76 @@
 
   <h2>Contact alerts</h2>
 
-  <div class="setting">
-    <div class="name">
-      Alert on tags
-      <span class="hint">Shown in the floating panel and the on-page buttons</span>
+  <div class="group">
+    <div class="setting">
+      <div class="name">
+        Alert on tags
+        <span class="hint">Shown in the floating panel and the on-page buttons</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="alertsEnabled" />
+        <span class="slider"></span>
+      </label>
     </div>
-    <label class="switch">
-      <input type="checkbox" id="alertsEnabled" />
-      <span class="slider"></span>
-    </label>
-  </div>
-
-  <div class="setting stacked">
-    <div class="name">
-      Tags to watch
-      <span class="hint">Comma separated, matched exactly</span>
+    <div id="alerts-group">
+      <div class="hair"></div>
+      <div class="setting stacked">
+        <div class="name">
+          Tags to watch
+          <span class="hint">Comma separated, matched exactly</span>
+        </div>
+        <textarea id="alertTags" rows="2"></textarea>
+        <div class="swatches" id="swatches"></div>
+      </div>
+      <div class="hair"></div>
+      <div class="setting">
+        <div class="name">
+          Strict matching
+          <span class="hint">Only where Salesloft shows it as a tag</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="alertStrict" />
+          <span class="slider"></span>
+        </label>
+      </div>
     </div>
-    <textarea id="alertTags" rows="2"></textarea>
-    <div class="swatches" id="swatches"></div>
-  </div>
-
-  <div class="setting">
-    <div class="name">
-      Strict matching
-      <span class="hint">Only where Salesloft shows it as a tag</span>
-    </div>
-    <label class="switch">
-      <input type="checkbox" id="alertStrict" />
-      <span class="slider"></span>
-    </label>
   </div>
 
   <h2>Live transcription</h2>
 
-  <div class="setting">
-    <div class="name">
-      Live transcription
-      <span class="hint">Starts with every call; save a transcript with the ↓ button when one is worth keeping. Needs the local server running</span>
-    </div>
-    <label class="switch">
-      <input type="checkbox" id="transcription" />
-      <span class="slider"></span>
-    </label>
-  </div>
-
-  <div id="transcription-group">
-    <div class="setting stacked">
+  <div class="group">
+    <div class="setting">
       <div class="name">
-        Call audio output
-        <span class="hint">Must be the device you actually listen on</span>
+        Live transcription
+        <span class="hint">Starts with every call; save a transcript with the ↓ button when one is worth keeping. Needs the local server running</span>
       </div>
-      <select id="outputDeviceId">
-        <option value="">System default</option>
-      </select>
+      <label class="switch">
+        <input type="checkbox" id="transcription" />
+        <span class="slider"></span>
+      </label>
     </div>
 
-    <div class="notice">
-      <strong>Before your first live call:</strong> confirm you can still hear the
-      prospect. Capturing tab audio moves it off the normal output path, and the
-      extension routes it back — verify that on a real call, not a test tone.
+    <div id="transcription-group">
+      <div class="hair"></div>
+      <div class="setting stacked">
+        <div class="name">
+          Call audio output
+          <span class="hint">Must be the device you actually listen on</span>
+        </div>
+        <select id="outputDeviceId">
+          <option value="">System default</option>
+        </select>
+      </div>
+      <div class="hair"></div>
+      <div class="setting stacked">
+        <div class="notice amber">
+          <strong>Before your first live call:</strong> confirm you can still hear the
+          prospect. Capturing tab audio moves it off the normal output path, and the
+          extension routes it back — verify that on a real call, not a test tone.
+        </div>
+        <div id="server-state"></div>
+      </div>
     </div>
-
-    <div id="server-state"></div>
   </div>
 
   <div class="footer">
@@ -268,6 +389,7 @@
   </div>
 
   <script src="defaults.js"></script>
+  <script src="spring.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

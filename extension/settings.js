@@ -20,6 +20,7 @@ const els = {
   transcription: document.getElementById('transcription'),
   outputDeviceId: document.getElementById('outputDeviceId'),
   transcriptionGroup: document.getElementById('transcription-group'),
+  alertsGroup: document.getElementById('alerts-group'),
   serverState: document.getElementById('server-state'),
   shortcuts: document.getElementById('shortcuts'),
   testServer: document.getElementById('test-server'),
@@ -38,6 +39,7 @@ chrome.storage.sync.get(DEFAULTS, (settings) => {
   els.transcription.checked = settings.transcription;
   populateOutputDevices(settings.outputDeviceId);
   syncTranscriptionGroup();
+  syncAlertsGroup();
 });
 
 let savedTimer;
@@ -68,6 +70,13 @@ function paintSwatches() {
 
 function syncTranscriptionGroup() {
   els.transcriptionGroup.classList.toggle('disabled-group', !els.transcription.checked);
+}
+
+// The tag list and strict matching only mean anything with alerts on, so the
+// group dims and stops taking clicks with its switch — the switch itself stays
+// live, because that is how the rep turns it back on.
+function syncAlertsGroup() {
+  els.alertsGroup.classList.toggle('disabled-group', !els.alertsEnabled.checked);
 }
 
 // ------------------------------------------------------------- key bindings
@@ -224,6 +233,7 @@ els.disposition.addEventListener('change', () => {
 
 els.alertsEnabled.addEventListener('change', () => {
   persist('alertsEnabled', els.alertsEnabled.checked);
+  syncAlertsGroup();
 });
 
 els.alertStrict.addEventListener('change', () => {
@@ -299,3 +309,10 @@ els.testServer.addEventListener('click', checkServer);
 els.shortcuts.addEventListener('click', () => {
   chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
 });
+
+// The press, on the same spring the on-page plate and the floating panel use,
+// so a button answers identically wherever the rep meets one. Springs write an
+// inline transform, which is why settings.html transitions colour only.
+for (const button of document.querySelectorAll('button')) {
+  self.slPressable(button);
+}
