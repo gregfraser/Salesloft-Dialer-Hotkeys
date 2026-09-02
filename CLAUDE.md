@@ -24,6 +24,7 @@ docs/        architecture, troubleshooting
 There is no build step or linter. Tests exist and are fast:
 
 ```bash
+pip install numpy pytest pyyaml fastapi httpx  # all the Python suite needs (no torch, no whisper)
 python -m pytest tests/                        # 93 tests: VAD, queue, protocol, session, benchmark
 python -m pytest tests/test_vad_endpointing.py # a single file
 python -m pytest tests/ -k merges -q            # a single test by name
@@ -90,6 +91,7 @@ Four execution contexts in Chrome plus one Python process. Understanding any fea
 
 - **`background.js`** (service worker) — the relay and the owner of transcription state (`IDLE → STARTING → TRANSCRIBING → FINALIZING`, plus first-class `DEGRADED`). Finds the most-recently-accessed Salesloft tab, forwards dialer actions, and on failure injects the content scripts via `chrome.scripting` and retries once. Owns the panel window (id in `chrome.storage.session`, so it survives worker sleep), the offscreen document lifecycle, and capture arming.
 - **`content.js`** — runs only on `https://app.salesloft.com/*`, and renders its overlay only on a contact's page (`syncOverlay()`); performs the DOM automation, renders the optional overlay (buttons, contact-alert line, status, and — when transcription is on — the live transcript pane), handles in-page F8/F9. Guards double-injection with `window.__slHotkeysLoaded`.
+- **Content-script order in `manifest.json` is load-bearing**: `defaults.js`, `spring.js`, `call-detect.js`, `content.js`, `alerts.js`. All five share one isolated world and talk through globals, so `content.js` needs the defaults, the springs and the detector already defined, and `alerts.js` runs last because it calls the `window.__slOnContactAlert` hook that `content.js` registers. `background.js` recovers a failed send by injecting a copy of that list via `chrome.scripting.executeScript` (`files:` in `sendToSalesloft`), and the two lists have to be kept identical by hand. At the time of writing the fallback list lacks `spring.js`, so `content.js` throws on `window.slSpring` when it is injected that way into a tab that predates the install with the overlay enabled.
 - **Orphaned content scripts are a normal state.** Reloading or updating the extension leaves the old content scripts running in the page with `chrome.runtime` gone — accessing it throws. Every `chrome.*` send from a content script goes through a guard (`safeSend()` in `content.js`, try/catch in `alerts.js`) so the DOM flows still complete from a stale script, and `buildOverlay()` always **replaces** an existing overlay rather than keeping it, because a leftover one is wired to the dead context — `syncOverlay()` keeps that true by treating an overlay it did not build as missing. Preserve both patterns in new content-script code.
 - **`call-detect.js`** — call-state detection, **observe only**. Takes its DOM access as injected functions (`elements`, `isVisible`) so it is testable without a DOM.
 - **`alerts.js`** — reads the Disposition / Sentiment tags already on the contact's page, **read only**. It renders nothing of its own: the colour-coded alert shows in the floating panel (via a `contact-alert` message) and as a subtle line inside the on-page overlay (via the `window.__slOnContactAlert` hook `content.js` registers in their shared isolated world). `content.js` also reads `window.__slContactAlert` for its status line.
@@ -151,6 +153,12 @@ neighbour reads "F12". The eye lands on the difference rather than the keys. The
 button is a reminder of what is under the hand; the `title` on both surfaces
 still names both keys and says where each works, and the popup remains the full
 account of what Chrome actually has.
+
+**One key, one action.** Recording a key that the other action already holds
+moves it across (`settings.js`, `onRecordKey`): the other row goes to "Not set"
+where the rep can see it, rather than the press being silently refused or two
+buttons firing on one key. Esc and Tab are `SL_RESERVED_KEYS` and cannot be
+recorded, because the popup uses them to cancel and to move between fields.
 
 Transcription deliberately has no binding of its own: capture arming makes a
 page keypress able to stop capture but never to reliably start it (see
@@ -220,7 +228,7 @@ When Salesloft ships UI changes, these are what break.
 - **The contact tag is the one thing allowed to move the layout, and that is deliberate.** It holds
   **no** space until the page scan reports one, then springs the plate open (`slSlot`, a lazily measured
   `scrollHeight` with a negative margin cancelling the stack gap while closed). This reverses the older
-  reserved-band rule and supersedes `plans/001-contact-alert-entrance.md` in the design bundle, which
+  reserved-band rule and supersedes `plans/001-contact-alert-entrance.md` in the design bundle (not in this repo), which
   specified the opposite. The grounds: the scan lands before the rep has decided to dial, so the movement
   is over well before the aim — and a permanently reserved band is ~20px of empty plate on every contact
   that has no tag, which is most of them.
