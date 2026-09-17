@@ -33,7 +33,7 @@ node --test tests/test_hotkeys.js              # key bindings: record, match, la
 node --test tests/test_pcm_worklet.js          # audio downsampling (14)
 node --test tests/test_transcript_format.js    # shared transcript formatting (10)
 node --test tests/test_contact_page.js         # which routes are a contact (8)
-node --test tests/test_contact_alert.js        # tag matching (6)
+node --test tests/test_contact_alert.js        # tag matching (7)
 ```
 
 `node --test tests/` does **not** work — the directory is named `tests` and the files use underscores, so neither matches Node's default discovery patterns. Name the file explicitly.
