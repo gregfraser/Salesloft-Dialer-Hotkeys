@@ -138,6 +138,13 @@ test('an unbound action labels as nothing at all', () => {
 });
 
 // -------------------------------------------------------------- normalising
+test('the shipped defaults are the arrow keys, labelled as arrows', () => {
+  assert.deepStrictEqual(DEFAULTS.hotkeys, { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight' });
+  assert.strictEqual(slHotkeyLabel('ArrowLeft', true), '←');
+  assert.strictEqual(slHotkeyLabel('ArrowRight', false), '→');
+  assert.strictEqual(slHotkeyFromEvent(keyEvent('ArrowLeft')), 'ArrowLeft');
+});
+
 test('the shipped defaults survive normalising unchanged', () => {
   assert.deepStrictEqual(slNormalizeHotkeys(DEFAULTS.hotkeys), DEFAULTS.hotkeys);
 });

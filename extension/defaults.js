@@ -28,14 +28,14 @@
 
     // -- contact alerts --
     alertsEnabled: true,
-    alertTags: ['No Interest', 'Meeting Scheduled', 'Interested'],
+    alertTags: ['No Interest', 'Bad Fit', 'Meeting Scheduled', 'Interested', 'Connected', 'Wrong Number', 'Do Not Contact'],
     alertStrict: true,
 
     // -- key bindings --
     // The keys the rep picked for the two dialer actions. See the section
     // below for why the extension keeps its own bindings at all, and why an
     // empty string (no key) is a normal value.
-    hotkeys: { 'kill-and-log': 'F8', 'start-call': 'F9' },
+    hotkeys: { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight' },
   };
 
   root.SL_DEFAULTS = DEFAULTS;
@@ -48,6 +48,8 @@
     'no interest': 'red',
     'not interested': 'red',
     'do not contact': 'red',
+    'bad fit': 'red',
+    'wrong number': 'red',
   };
 
   root.slColorFor = function (tag) {

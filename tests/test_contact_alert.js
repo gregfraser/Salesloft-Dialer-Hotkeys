@@ -41,6 +41,17 @@ test('every shipped tag gets its colour', () => {
 test('wordings a team might use instead land on the same colour', () => {
   assert.strictEqual(slColorFor('Not Interested'), 'red');
   assert.strictEqual(slColorFor('Do Not Contact'), 'red');
+  assert.strictEqual(slColorFor('Bad Fit'), 'red');
+  assert.strictEqual(slColorFor('Wrong Number'), 'red');
+});
+
+test('the default watch list is the seven tags a cadence logs', () => {
+  assert.deepStrictEqual(DEFAULTS.alertTags, [
+    'No Interest', 'Bad Fit', 'Meeting Scheduled', 'Interested',
+    'Connected', 'Wrong Number', 'Do Not Contact',
+  ]);
+  // Connected is neither a yes nor a no, so it stays on the amber fallback.
+  assert.strictEqual(slColorFor('Connected'), 'amber');
 });
 
 test('a tag matches however Salesloft cased or spaced it', () => {

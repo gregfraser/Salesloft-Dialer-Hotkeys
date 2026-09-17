@@ -1,6 +1,7 @@
 // Salesloft Dialer Hotkeys — contact alerts
 // Watches the Salesloft page for Disposition / Sentiment tags that mean "don't
-// just dial this person" (No Interest, Meeting Scheduled, Interested). This
+// just dial this person" (No Interest, Meeting Scheduled, Do Not Contact and
+// the rest of the default list in defaults.js). This
 // script only detects: the alert itself renders in the floating panel and as a
 // subtle line inside the on-page button overlay — never as its own popup over
 // the Salesloft UI.
@@ -17,7 +18,7 @@
   const D = (self.SL_DEFAULTS || {});
   const settings = {
     alertsEnabled: D.alertsEnabled !== false,
-    alertTags: D.alertTags || ['No Interest', 'Meeting Scheduled', 'Interested'],
+    alertTags: D.alertTags || ['No Interest', 'Bad Fit', 'Meeting Scheduled', 'Interested', 'Connected', 'Wrong Number', 'Do Not Contact'],
     alertStrict: D.alertStrict !== false,
   };
 
