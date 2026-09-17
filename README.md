@@ -7,8 +7,9 @@ Make cadence calling faster. Instead of clicking End Call, picking a disposition
 </p>
 
 And before you dial, it checks the contact's page for you — if Salesloft already
-has them tagged **Meeting Scheduled**, **Interested**, or **No Interest**, a
-colour-coded alert says so, right above the buttons.
+has them tagged **Meeting Scheduled**, **Interested**, **No Interest**, **Do
+Not Contact** or another tag on your watch list, a colour-coded alert says so,
+right above the buttons.
 
 ---
 
@@ -165,7 +166,7 @@ Click the extension's icon in your toolbar to open settings:
 | **Buttons on Salesloft page** | Shows or hides the plate in the corner of a contact's page. Turn off if you're using the floating panel or just the keyboard. |
 | **Disposition** | The label the red button logs. Set to "No Answer." Only change this if your team's dropdown uses different wording — it must match the dropdown option in Salesloft **exactly**, including capitalization. |
 | **Alert on tags** | Turns the contact alerts on or off. |
-| **Tags to watch** | Which tags trigger an alert, comma separated. Starts with No Interest, Meeting Scheduled, Interested. Each one must match Salesloft's wording exactly. The coloured pills underneath show you what each tag will look like. |
+| **Tags to watch** | Which tags trigger an alert, comma separated. Starts with No Interest, Bad Fit, Meeting Scheduled, Interested, Connected, Wrong Number, Do Not Contact. Each one must match Salesloft's wording exactly. The coloured pills underneath show you what each tag will look like. |
 | **Strict matching** | On by default: only counts a tag where Salesloft actually renders one — a pill on a logged call or meeting, a labelled Disposition/Sentiment field, or an activity table column. Keeps ordinary text like "we had a meeting scheduled last quarter" from setting it off. Turn it off only if your layout shows these tags somewhere unusual and you're not getting alerts. |
 | **Key bindings** | The key for each button — press the one you want, number pad included. See [Choosing your keys](#choosing-your-keys). |
 | **Chrome shortcuts** | Opens Chrome's own shortcut page, for the combinations that work from another tab. |

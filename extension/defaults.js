@@ -28,7 +28,7 @@
 
     // -- contact alerts --
     alertsEnabled: true,
-    alertTags: ['No Interest', 'Meeting Scheduled', 'Interested'],
+    alertTags: ['No Interest', 'Bad Fit', 'Meeting Scheduled', 'Interested', 'Connected', 'Wrong Number', 'Do Not Contact'],
     alertStrict: true,
 
     // -- key bindings --
@@ -48,6 +48,8 @@
     'no interest': 'red',
     'not interested': 'red',
     'do not contact': 'red',
+    'bad fit': 'red',
+    'wrong number': 'red',
   };
 
   root.slColorFor = function (tag) {
