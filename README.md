@@ -3,7 +3,7 @@
 Make cadence calling faster. Instead of clicking End Call, picking a disposition, and hitting Log & Complete for every no-answer, you press **one key** (or click one button) and it all happens for you.
 
 <p align="center">
-  <img src="extension/images/controls.png" alt="The dialer plate: a red No Answer button bound to F8 beside a green Call button bound to F9, with a status line reading Connected and a call timer at 00:35" width="440">
+  <img src="extension/images/controls.png" alt="The dialer plate: a red No Answer button beside a green Call button, each showing its bound key, with a status line reading Connected and a call timer at 00:35" width="440">
 </p>
 
 And before you dial, it checks the contact's page for you — if Salesloft already
@@ -20,8 +20,8 @@ Three things, in this order. Each one links to the full steps.
 | | Do this | Takes |
 |---|---|---|
 | **1** | [Install the extension](#installing) — download the folder, load it in Chrome | ~2 min, once |
-| **2** | [Set your keys](#choosing-your-keys) — or keep <kbd>F8</kbd> and <kbd>F9</kbd> | ~1 min, once |
-| **3** | [Dial](#using-it) — <kbd>F9</kbd> to call, <kbd>F8</kbd> to kill and log | every call |
+| **2** | [Set your keys](#choosing-your-keys) — or keep <kbd>←</kbd> and <kbd>→</kbd> | ~1 min, once |
+| **3** | [Dial](#using-it) — <kbd>→</kbd> to call, <kbd>←</kbd> to kill and log | every call |
 
 Live transcription is optional and separate — it needs a small program running
 on your own machine. [Set it up later](#live-transcription-optional), once
@@ -92,10 +92,10 @@ Open Salesloft and start your cadence like normal. Then:
 
 | You want to... | Press | Or click |
 |---|---|---|
-| Start the next call | <kbd>F9</kbd> | 🟢 **▶ Call** |
-| End the call, log "No Answer," move on | <kbd>F8</kbd> | 🔴 **✕ No Answer** |
+| Start the next call | <kbd>→</kbd> | 🟢 **▶ Call** |
+| End the call, log "No Answer," move on | <kbd>←</kbd> | 🔴 **✕ No Answer** |
 
-<kbd>F8</kbd> and <kbd>F9</kbd> are just where it starts — **you can change them to
+<kbd>←</kbd> and <kbd>→</kbd> are just where it starts — **you can change them to
 any key you like, including the number pad.** Most reps end up on the pad, one
 hand on it all day: see [Choosing your keys](#choosing-your-keys).
 

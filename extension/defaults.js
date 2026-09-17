@@ -35,7 +35,7 @@
     // The keys the rep picked for the two dialer actions. See the section
     // below for why the extension keeps its own bindings at all, and why an
     // empty string (no key) is a normal value.
-    hotkeys: { 'kill-and-log': 'F8', 'start-call': 'F9' },
+    hotkeys: { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight' },
   };
 
   root.SL_DEFAULTS = DEFAULTS;
