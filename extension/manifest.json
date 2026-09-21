@@ -47,6 +47,13 @@
       },
       "description": "Start the next call"
     },
+    "not-in-service": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+7",
+        "mac": "Command+Shift+7"
+      },
+      "description": "Log not in service and remove from the cadence"
+    },
     "toggle-transcription": {
       "suggested_key": {
         "default": "Ctrl+Shift+8",

@@ -264,6 +264,30 @@
       </div>
       <input type="text" id="disposition" />
     </div>
+    <div class="hair"></div>
+    <div class="setting">
+      <div class="name">
+        Not in Service button
+        <span class="hint">
+          A third, smaller button under the other two. Logs the call with the
+          disposition below and takes the person out of the cadence.
+        </span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="notInService" />
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div id="not-in-service-group">
+      <div class="hair"></div>
+      <div class="setting center">
+        <div class="name">
+          Not in Service disposition
+          <span class="hint">Must match dropdown text exactly</span>
+        </div>
+        <input type="text" id="notInServiceDisposition" />
+      </div>
+    </div>
   </div>
 
   <h2>Key bindings</h2>
@@ -290,6 +314,19 @@
         <button class="key-clear" data-clear="start-call" title="Clear this key">✕</button>
       </div>
     </div>
+    <div id="not-in-service-keys">
+      <div class="hair"></div>
+      <div class="setting center">
+        <div class="name">
+          Not in service &amp; remove
+          <span class="hint">Press it twice — once to arm, once to go ahead</span>
+        </div>
+        <div class="keys">
+          <button class="key" data-record="not-in-service"></button>
+          <button class="key-clear" data-clear="not-in-service" title="Clear this key">✕</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="keybind-note"></div>
@@ -301,7 +338,7 @@
       panel, and are ignored while you are typing in a field.
     </p>
     <p>
-      To dial from another tab, Chrome runs the same two jobs from its own
+      To dial from another tab, Chrome runs the same jobs from its own
       shortcuts. Chrome will not take a number pad key there, and it leaves a
       shortcut unset when something else already uses it:
     </p>

@@ -111,7 +111,7 @@ async function sendToSalesloft(action) {
     try {
       await chrome.scripting.executeScript({
         target: { tabId: target.id },
-        files: ['defaults.js', 'call-detect.js', 'content.js', 'alerts.js'],
+        files: ['defaults.js', 'spring.js', 'call-detect.js', 'content.js', 'alerts.js'],
       });
       await chrome.tabs.sendMessage(target.id, { type: 'dialer-action', action });
     } catch (e2) {
@@ -134,6 +134,21 @@ async function forwardToSalesloft(message) {
 
 function broadcastStatus(msg, kind) {
   chrome.runtime.sendMessage({ type: 'status', msg, kind }).catch(() => {});
+}
+
+// Which key actually arms capture, as Chrome has it right now. The manifest
+// only suggests a key and Chrome silently leaves a command unassigned when
+// something else already holds it, so the prompt that tells the rep what to
+// press has to read it back — the same rule the buttons' keycaps follow.
+// Empty means Chrome assigned nothing, and the prompt says that instead.
+async function armingKey() {
+  try {
+    const commands = await chrome.commands.getAll();
+    const arm = commands.find((c) => c.name === 'toggle-transcription');
+    return (arm && arm.shortcut) || '';
+  } catch (e) {
+    return '';
+  }
 }
 
 function reportTranscription(state, detail) {
@@ -237,12 +252,12 @@ async function startTranscription(preferredTabId) {
   try {
     streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
   } catch (err) {
-    // Almost always "extension has not been invoked for this tab".
+    // Almost always "extension has not been invoked for this tab". That is a
+    // Chrome constraint and the normal state before the rep has armed capture
+    // once, so it reports as its own state rather than as an error: nothing is
+    // broken and nothing was half-logged.
     setTranscriptionState(STATE.DEGRADED);
-    reportTranscription(
-      'error',
-      'Transcription not armed — press Ctrl+Shift+8 with the Salesloft tab in front'
-    );
+    reportTranscription('notarmed', await armingKey());
     console.warn('[transcriber] getMediaStreamId failed', err);
     return;
   }
@@ -298,7 +313,7 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   // invocation for that tab, which is what Chrome requires to start capture.
   if (isSalesloftTab(tab)) await armTab(tab.id);
 
-  if (command === 'kill-and-log' || command === 'start-call') {
+  if (command === 'kill-and-log' || command === 'start-call' || command === 'not-in-service') {
     sendToSalesloft(command);
     return;
   }

@@ -36,6 +36,15 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return;
     if (changes.disposition) settings.disposition = changes.disposition.newValue;
+    if (changes.notInServiceDisposition) settings.notInServiceDisposition = changes.notInServiceDisposition.newValue;
+    // The third control is present or absent, never hidden in place, so
+    // turning it on or off rebuilds the overlay the same way the transcript
+    // pane does. The pair above it keeps its exact geometry either way; all
+    // that changes is 34px of plate below them.
+    if (changes.notInService) {
+      settings.notInService = changes.notInService.newValue;
+      syncOverlay(true);
+    }
     if (changes.pageOverlay) {
       settings.pageOverlay = changes.pageOverlay.newValue;
       syncOverlay();
@@ -56,11 +65,18 @@
     }
   });
 
-  const CONFIG = { stepTimeout: 8000, autoAdvanceDelayMs: 400 };
+  // confirmTimeout is deliberately short and deliberately not stepTimeout: it
+  // is how long to wait for a confirmation dialog that may not exist in this
+  // Salesloft build at all, so its absence has to cost a moment, not 8s.
+  const CONFIG = { stepTimeout: 8000, autoAdvanceDelayMs: 400, confirmTimeout: 1500 };
 
   // What each button is, keyed by the action it fires — the same names the
   // manifest's commands and the message protocol use.
-  const ACTION_LABELS = { 'kill-and-log': 'No Answer', 'start-call': 'Call' };
+  const ACTION_LABELS = {
+    'kill-and-log': 'No Answer',
+    'start-call': 'Call',
+    'not-in-service': 'Not in Service',
+  };
 
   // Chrome's own shortcut for each action, as Chrome has it right now: '' for a
   // command it left unassigned. Answered by the service worker, which is the
@@ -159,6 +175,75 @@
     realClick(option);
   }
 
+  // ---------------- Not in Service (DOM) ----------------
+  // The steps below are Salesloft's own, taken from a recording of the flow
+  // done by hand rather than guessed at. Tier order is the same as everywhere
+  // else in this extension: the accessible name first, a data-testid second, a
+  // generated styled-components class never — those change on every deploy.
+
+  // Salesloft splits logging into a button and a caret beside it. "Log Only" is
+  // in the caret's menu, and it is the right one here: completing the step is
+  // what removing the person from the cadence replaces.
+  function logMenuToggle() {
+    const root = loggerRoot();
+    const nodes = [...root.querySelectorAll('button,[role="button"],[data-testid="menuToggle"]')];
+    return (
+      nodes.find((n) => visible(n) && /log only/i.test(n.getAttribute('aria-label') || '')) ||
+      nodes.find((n) => visible(n) && n.matches('[data-testid="menuToggle"]')) ||
+      null
+    );
+  }
+
+  // The opened menu is portalled to the end of the body, so this is not scoped
+  // to the logger the way the buttons are.
+  function menuItemByText(text) {
+    const t = text.toLowerCase();
+    return [...document.querySelectorAll('[role="menuitem"],[role="option"],li,button')].find(
+      (el) => el.offsetParent !== null && el.textContent.replace(/\s+/g, ' ').trim().toLowerCase() === t
+    );
+  }
+
+  // The cadence's own control, on the page behind the logger rather than in it.
+  // Matched on its accessible name: it is an icon button with no text of its own.
+  const REMOVE_FROM_CADENCE = /remove\s+(?:person|this person|them)?\s*from\s+(?:the\s+)?cadence/i;
+
+  function removeFromCadenceButton() {
+    return [...document.querySelectorAll('button,[role="button"]')].find((el) => {
+      if (!visible(el)) return false;
+      const name = el.getAttribute('aria-label') || el.getAttribute('title') || '';
+      return REMOVE_FROM_CADENCE.test(name);
+    });
+  }
+
+  // Salesloft asks before it removes someone. The dialog is not in the
+  // recording of this flow, so its absence is a normal outcome and not a
+  // failure — but a dialog that does appear and has no button this recognises
+  // is, because leaving one open would mean the rep thinks the person is out of
+  // the cadence when they are still in it.
+  const CONFIRM_TEXTS = [
+    'remove from cadence', 'remove person from cadence', 'remove', 'confirm',
+    'yes, remove', 'yes',
+  ];
+
+  async function confirmCadenceRemoval() {
+    let dialog;
+    try {
+      dialog = await waitFor(
+        () => [...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')]
+          .find((d) => d.offsetParent !== null),
+        CONFIG.confirmTimeout
+      );
+    } catch (e) {
+      return; // no confirmation step — the click above was the whole of it
+    }
+    const button = [...dialog.querySelectorAll('button')].find(
+      (b) => visible(b) &&
+        CONFIRM_TEXTS.indexOf(b.textContent.replace(/\s+/g, ' ').trim().toLowerCase()) !== -1
+    );
+    if (!button) throw new Error('A dialog is open — confirm the removal there');
+    realClick(button);
+  }
+
   // ---------------- Core flows ----------------
   let busy = false;
 
@@ -197,6 +282,82 @@
     }
   }
 
+  // A dead number. Log the call under its own disposition and take the person
+  // out of the cadence, so tomorrow's list does not hand it back.
+  //
+  // Same invariant as killAndLog: the disposition is set before anything logs,
+  // and any failed step throws and leaves the call unlogged rather than logging
+  // it wrong. The removal is last for the same reason — a person who is out of
+  // the cadence with no call logged against them is the worse half-state.
+  async function runNotInService() {
+    if (busy) return;
+    setBusy(true);
+    const disposition = settings.notInServiceDisposition || 'Not in Service';
+    try {
+      const endBtn = buttonByText('End Call');
+      if (endBtn) {
+        setStatus('Ending call…');
+        realClick(endBtn);
+        await sleep(CONFIG.autoAdvanceDelayMs);
+      }
+
+      setStatus(`Setting "${disposition}"…`);
+      await setDisposition(disposition);
+      await sleep(CONFIG.autoAdvanceDelayMs);
+
+      setStatus('Logging…');
+      const menu = await waitFor(logMenuToggle);
+      realClick(menu);
+      const logOnly = await waitFor(() => menuItemByText('Log Only'));
+      realClick(logOnly);
+      await sleep(CONFIG.autoAdvanceDelayMs);
+
+      setStatus('Removing from cadence…');
+      const remove = await waitFor(removeFromCadenceButton);
+      realClick(remove);
+      await confirmCadenceRemoval();
+
+      setStatus(`Logged ${disposition} ✓ — removed from cadence`, 'ok');
+    } catch (err) {
+      setStatus(`Stopped: ${err.message}. Finish manually.`, 'err');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // One press arms, a second within three seconds commits. This is the only
+  // control on the plate that takes a person out of a cadence, and undoing that
+  // means finding them and adding them back by hand — but a modal mid-call is
+  // exactly what this extension does not do, so the confirmation lives in the
+  // control itself: it says what it is about to do and waits.
+  const ARM_MS = 3000;
+  let armed = false;
+  let armHandle = null;
+
+  function disarm() {
+    clearTimeout(armHandle);
+    armHandle = null;
+    if (!armed) return;
+    armed = false;
+    renderSecondary();
+  }
+
+  function notInService() {
+    if (busy || !settings.notInService) return;
+    if (!armed) {
+      armed = true;
+      clearTimeout(armHandle);
+      armHandle = setTimeout(disarm, ARM_MS);
+      renderSecondary();
+      // Short enough to survive the 214px strip when there is no pane beside
+      // it; the button itself is already saying what "again" would do.
+      setStatus('Press again to confirm', 'warn');
+      return;
+    }
+    disarm();
+    runNotInService();
+  }
+
   async function startCall() {
     if (busy) return;
     setBusy(true);
@@ -220,17 +381,21 @@
     if (msg.type === 'dialer-action') {
       if (msg.action === 'kill-and-log') killAndLog();
       if (msg.action === 'start-call') startCall();
+      if (msg.action === 'not-in-service') notInService();
     }
 
     // Transcription traffic, relayed by the background worker: content scripts
     // do not receive the offscreen document's broadcasts directly.
     if (msg.type === 'transcript' && msg.payload) addTranscriptEntry(msg.payload);
     if (msg.type === 'transcription-status') {
-      setTranscriptConnection(msg.state);
-      // Only errors are worth taking the status line for — "not armed" is the
-      // one the rep has to act on. Written straight to the element rather than
-      // through setStatus(), because the panel already has this message from
-      // the worker and would otherwise show it twice.
+      setTranscriptConnection(msg.state, msg.detail);
+      // Only a real error takes the status strip, and "not armed" is not one:
+      // it is the normal state before the rep has armed capture once, and the
+      // strip's error colour belongs to a call that may now be half-logged.
+      // That prompt lives in the pane instead, where there is room to say which
+      // key and why. Written straight to the element rather than through
+      // setStatus(), because the panel already has this message from the worker
+      // and would otherwise show it twice.
       if (msg.state === 'error' && msg.detail && statusEl) {
         statusEl.textContent = msg.detail;
         statusEl.title = msg.detail;
@@ -311,10 +476,19 @@
   const MAIN_GAP = 10;          // the button column | the transcript pane
   const PAIR_GAP = 6;           // between the two action buttons
   const STACK_GAP = 8;          // between the tag slot, the row and the status
-  const ICON = 21;              // the pane header's square buttons
-  // Minimised, the pane keeps its header and nothing else: the light, the
-  // timer and the three buttons. Wide enough for exactly those.
-  const PANE_MINI_WIDTH = 146;
+  // The pane header's square buttons. 24 is the floor a pointer target may
+  // have (WCAG 2.2 target size, minimum); 21 was under it, and these three are
+  // aimed at mid-call.
+  const ICON = 24;
+  // Collapsed, the pane is exactly as wide as the three buttons it still has
+  // to hold: 3 × 24 + 2 × 6 between them + 6 of padding either side. Everything
+  // else in there — the light, its word, the timer, the line count — stacks
+  // into that width rather than setting it.
+  const PANE_MINI_WIDTH = 96;
+  // The third control. Two thirds the height of a keycap row and a quarter of
+  // the pair's, because it is the thing a rep reaches for once in a hundred
+  // dials, not once in three.
+  const SECONDARY_HEIGHT = 26;
   const HEADER_GAP = 6;         // inside the pane header
   // The status is one line, always, and reserved whether or not it has
   // anything to say — that is what stops a long "Stopped: …" from resizing the
@@ -372,6 +546,7 @@
   let plateResizeBound = false;
   let overlayEl = null; // the box this copy of the script built, if any
   let ctl = null;       // the two action buttons, or null with no overlay
+  let nis = null;       // the Not in Service strip, or null when it is off
   let tx = null;        // transcript DOM refs, or null when the pane is not built
 
   // Transcript state outlives the DOM: rebuilding the overlay (a settings
@@ -382,6 +557,8 @@
     autoScroll: true,
     paused: false,
     minimized: false,      // the pane is hidden; everything else carries on
+    notArmed: false,       // Chrome has not authorised a capture of this tab yet
+    armKey: '',            // and this is the key that would, as Chrome has it
     unsaved: false,        // lines added since the last save
     pendingNewCall: false, // draw a divider before the next call's first line
     startedAt: 0,
@@ -442,7 +619,12 @@
     plateX = null;
     plateY = null;
     ctl = null;
+    nis = null;
     tx = null;
+    // The arming window belongs to the control that is armed. An overlay
+    // replaced mid-window would otherwise leave a press half-made against a
+    // button that is no longer on the page.
+    disarm();
   }
 
   // Subtle mirror of the contact alert inside the overlay — one tinted line,
@@ -517,9 +699,27 @@
       // would arrive late and overshoot twice. Colour is still a transition,
       // because colour has no velocity to hand over.
       `#${OVERLAY_ID} .sl-act{transition:filter ${RELEASE_MS}ms ease}`,
-      `#${OVERLAY_ID} .sl-key{background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.16);` +
-        `box-shadow:inset 0 1px 0 rgba(255,255,255,.08);border-radius:4px;padding:1px 5px;` +
-        `font-size:${TYPE.overline}px;font-weight:600;letter-spacing:.04em;white-space:nowrap}`,
+      // A keycap is a shape with a character centred in it, so it is centred
+      // like one. It used to be padding alone — 1px top and bottom around an
+      // uncontrolled line-height — which left a single character sitting in a
+      // 14px sliver, and letter-spacing applies after the last character too,
+      // so a one-character cap was pushed left of its own middle. An explicit
+      // line-height, a minimum size and inline-flex centring fix all three, and
+      // the padding-inline compensates the trailing letter-space.
+      `#${OVERLAY_ID} .sl-key{display:inline-flex;align-items:center;justify-content:center;` +
+        `min-width:18px;min-height:16px;box-sizing:border-box;` +
+        `background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.16);` +
+        `box-shadow:inset 0 1px 0 rgba(255,255,255,.08);border-radius:4px;padding:2px 4px 2px 5px;` +
+        `font-size:${TYPE.overline}px;font-weight:600;line-height:1;letter-spacing:.04em;white-space:nowrap}`,
+      // The third control. A raised face like the pane header rather than a
+      // third gradient: it is a smaller thing than the pair above it and has to
+      // read that way at a glance, or the plate grows a third primary action.
+      `#${OVERLAY_ID} .sl-second{display:flex;align-items:center;gap:6px;` +
+        `box-sizing:border-box;width:100%;height:${SECONDARY_HEIGHT}px;padding:0 8px;` +
+        `border-radius:5px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);` +
+        `box-shadow:inset 0 1px 0 rgba(255,255,255,.06);color:${FG_SOFT};` +
+        `font-size:${TYPE.alert}px;font-weight:500;cursor:pointer;` +
+        `transition:background-color ${RELEASE_MS}ms ease,border-color ${RELEASE_MS}ms ease,color ${RELEASE_MS}ms ease}`,
       // The small square buttons in the pane header. Their resting look lives
       // here so a highlight set inline — the save nudge, the paused state — can
       // be cleared back to it with an empty string.
@@ -537,6 +737,8 @@
       // it stuck on the last thing touched, so it is gated rather than global.
       '@media (hover:hover) and (pointer:fine){' +
         `#${OVERLAY_ID} .sl-act:hover{filter:brightness(1.10)}` +
+        `#${OVERLAY_ID} .sl-second:not(.sl-armed):hover{background:rgba(255,255,255,.09);` +
+          `border-color:rgba(255,255,255,.14);color:${FG}}` +
         `#${OVERLAY_ID} .sl-icon:hover{background:rgba(255,255,255,.12);color:#fff}` +
         `#${OVERLAY_ID} .sl-icon.sl-save:hover{background:rgba(184,134,11,.3);color:#ffd88a}` +
         `#${OVERLAY_ID} .sl-pill:hover{filter:brightness(1.25)}}`,
@@ -545,7 +747,8 @@
       // rather than sitting there looking live. The press spring is suppressed
       // in the same state (see pressable's guard in buildOverlay), so a press
       // that is being thrown away does not answer as though it was not.
-      `#${OVERLAY_ID}.sl-busy .sl-act{filter:saturate(.4) brightness(.72);cursor:progress}`,
+      `#${OVERLAY_ID}.sl-busy .sl-act,#${OVERLAY_ID}.sl-busy .sl-second` +
+        '{filter:saturate(.4) brightness(.72);cursor:progress}',
 
       // Reduced motion: the springs already snap (spring.js checks the query on
       // every call), so all that is left to stop is the looping LIVE dot.
@@ -607,9 +810,11 @@
   }
 
   function renderKeycaps() {
-    if (!ctl) return;
-    paintKeys(ctl.kill, 'kill-and-log');
-    paintKeys(ctl.call, 'start-call');
+    if (ctl) {
+      paintKeys(ctl.kill, 'kill-and-log');
+      paintKeys(ctl.call, 'start-call');
+    }
+    if (nis) paintKeys(nis.el, 'not-in-service');
   }
 
   // ✕ / ▶ over the label over the keys that do the same thing. The keycaps are
@@ -649,6 +854,61 @@
     b.addEventListener('click', onClick);
     paintKeys(b, action);
     return b;
+  }
+
+  // The third control. Everything about it is smaller than the pair above: a
+  // raised face rather than a gradient, one line rather than two, 26px rather
+  // than 108. That is the whole point of it — a rep reaches for this once in a
+  // hundred dials, and a control that looks like the other two would be read as
+  // often as them.
+  function buildSecondary() {
+    const b = document.createElement('button');
+    b.className = 'sl-second';
+    b.type = 'button';
+    // Mark, label, key — the same left-to-right order the pair reads in, at a
+    // quarter of the height. The shape lives in overlayStyle(); only the colour
+    // changes below, and only when the control is armed.
+    b.innerHTML =
+      `<span style="display:flex;flex:0 0 auto;align-items:center">${window.SL_ICONS.block}</span>` +
+      '<span class="sl-second-label" style="flex:1 1 auto;min-width:0;text-align:start;' +
+        'overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>' +
+      '<span class="sl-keys" style="display:flex;gap:4px;flex:0 0 auto"></span>';
+    b.addEventListener('click', notInService);
+    // Same gate as the pair: a press whose click is about to be swallowed by
+    // the busy flag must not answer as though it was not.
+    window.slPressable(b, () => !busy);
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = [
+      `width:${CONTROLS_WIDTH}px`, 'flex:0 0 auto', 'box-sizing:border-box', 'display:flex',
+    ].join(';');
+    wrap.appendChild(b);
+
+    nis = { el: b, wrap, label: b.querySelector('.sl-second-label') };
+    renderSecondary();
+    paintKeys(b, 'not-in-service');
+    return wrap;
+  }
+
+  // Rest, and armed. Armed is the red the rest of the extension uses for a
+  // thing that has already gone wrong, because this is the one control here
+  // whose result cannot be undone from this plate — and it says what it is
+  // about to do rather than repeating its own name.
+  function renderSecondary() {
+    if (!nis) return;
+    const theme = window.SL_PALETTE.red;
+    nis.label.textContent = armed ? 'Remove from cadence?' : ACTION_LABELS['not-in-service'];
+    nis.el.classList.toggle('sl-armed', armed);
+    nis.el.style.background = armed ? theme.bg : '';
+    nis.el.style.borderColor = armed ? theme.border : '';
+    nis.el.style.color = armed ? theme.text : '';
+    nis.el.setAttribute('aria-pressed', String(armed));
+    // The keycap goes while it is asking. The question is longer than the
+    // label it replaces, and the key is not news at the moment the control is
+    // waiting to hear whether it should go ahead — a truncated
+    // "Remove from cad…" is the one thing here a rep must not have to guess at.
+    const keys = nis.el.querySelector('.sl-keys');
+    if (keys) keys.style.display = armed ? 'none' : 'flex';
   }
 
   // Where the rep last put the plate, as an offset from the bottom-left anchor.
@@ -873,6 +1133,14 @@
     if (hasTranscript) main.appendChild(buildTranscript());
     box.appendChild(main);
 
+    // Below the pair, not beside it. Putting it in the row would have taken
+    // width from the two buttons the rep actually aims at, or made the plate
+    // wider than the pane it sits next to; below, the pair keeps its exact
+    // 214×108 and the column still finishes on the same line as the transcript.
+    // The cost is 34px of plate — this strip and the gap above it — and only
+    // for a rep who turned it on.
+    if (settings.notInService) box.appendChild(buildSecondary());
+
     // Under the whole box rather than inside the button column: a sentence
     // reads better across the width than down 214px, and the row above keeps
     // its full height instead of giving a third of it up to one word.
@@ -943,11 +1211,13 @@
   // touches this script, the lines are relayed by the background worker, and
   // nothing here clicks a Salesloft control.
 
-  function iconButton(glyph, title, onClick, size) {
+  function iconButton(icon, title, onClick, size) {
     const b = document.createElement('button');
     b.className = 'sl-icon';
     b.type = 'button';
-    b.textContent = glyph;
+    // A constant from ICONS, never anything that came off the page or out of
+    // storage.
+    b.innerHTML = icon;
     b.title = title;
     b.setAttribute('aria-label', title);
     const side = size || ICON;
@@ -980,28 +1250,86 @@
     renderTranscriptView();
   }
 
+  // How many lines are waiting behind a collapsed pane. Only ever read there,
+  // so it is the counter that replaces the reading rather than a second copy
+  // of it.
+  function renderLineCount() {
+    if (!tx) return;
+    const count = txView.entries.length;
+    tx.lines.textContent = count === 1 ? '1 line' : `${count} lines`;
+    tx.lines.style.color = count ? FG_MUTED : FG_DIM;
+  }
+
+  // The prompt owns what the pane's body shows, because the two states it
+  // arbitrates are mutually exclusive: either capture is not armed and the
+  // pane says which key arms it, or the transcript is there to read.
+  function renderArmPrompt() {
+    if (!tx) return;
+    const show = txView.notArmed && !txView.minimized;
+    tx.prompt.style.display = show ? 'flex' : 'none';
+    tx.list.style.display = show || txView.minimized ? 'none' : '';
+    if (!show) return;
+    // Read back from chrome.commands, never the manifest's suggestion: Chrome
+    // silently leaves a command unassigned when something else already holds
+    // the key, so printing the suggested one is how a prompt comes to name a
+    // shortcut the rep does not have.
+    const label = window.slHotkeyLabel(txView.armKey, false);
+    tx.promptLead.textContent = label ? 'Press' : 'No shortcut arms capture yet';
+    tx.promptKey.textContent = label;
+    tx.promptKey.style.display = label ? '' : 'none';
+    tx.promptTail.textContent = label ? 'with Salesloft in front' : '';
+    tx.promptTail.style.display = label ? '' : 'none';
+    tx.promptWhy.textContent = label
+      ? 'Chrome only lets capture start from this tab'
+      : 'Set one at chrome://extensions/shortcuts';
+  }
+
   function renderTranscriptView() {
     if (!tx) return;
     const hidden = txView.minimized;
-    // Minimising takes the reading away, not the controls: the list goes and
-    // the pane collapses onto its own header, which still carries the light,
-    // the timer, pause and save. The design draws the pane open only — it has
-    // no closed state — so this is the smallest thing that honours its shape
-    // without putting a control out of reach.
-    tx.list.style.display = hidden ? 'none' : '';
     tx.hint.style.display = 'none';
     // Width as well as height, or minimising would reclaim nothing: the wrapper
     // stretches to the button row either way, so a pane that only lost its list
-    // would leave the plate exactly as wide as before. The label goes and the
-    // timer stays — a call in progress is still worth reading at a glance.
+    // would leave the plate exactly as wide as before.
     tx.pane.style.width = hidden ? `${PANE_MINI_WIDTH}px` : `${TRANSCRIPT_WIDTH}px`;
     tx.pane.style.flexBasis = hidden ? `${PANE_MINI_WIDTH}px` : `${TRANSCRIPT_WIDTH}px`;
-    tx.pane.style.height = hidden ? 'auto' : `${PANEL_HEIGHT}px`;
-    tx.connection.style.display = hidden ? 'none' : '';
-    tx.toggle.textContent = hidden ? '»' : '«';
+    // Always the full row height. This used to go to 'auto', which left a 40px
+    // header hanging at the top of a 108px row with bare plate under it — the
+    // one place on this overlay where a control did not end where its
+    // neighbour did.
+    tx.pane.style.height = `${PANEL_HEIGHT}px`;
+
+    // Minimising takes the reading away, not the controls. Open, the header is
+    // a strip across the top of the pane; collapsed, it *is* the pane — the
+    // same parts turned through ninety degrees, so the light and its word, the
+    // timer at a size worth reading across a desk, the count of what is waiting
+    // and all three buttons stay exactly where a hand can find them.
+    tx.bar.style.flexDirection = hidden ? 'column' : 'row';
+    tx.bar.style.gap = hidden ? '4px' : `${HEADER_GAP}px`;
+    tx.bar.style.padding = hidden ? '7px 6px 6px' : '5px 7px';
+    tx.bar.style.background = hidden ? 'transparent' : 'rgba(255,255,255,.035)';
+    tx.bar.style.borderBottom = hidden ? 'none' : '1px solid rgba(255,255,255,.05)';
+    tx.bar.style.flex = hidden ? '1 1 auto' : '0 0 auto';
+    tx.meta.style.flexDirection = hidden ? 'column' : 'row';
+    tx.meta.style.gap = hidden ? '4px' : `${HEADER_GAP}px`;
+    tx.meta.style.alignSelf = hidden ? 'stretch' : 'auto';
+    tx.light.style.alignSelf = hidden ? 'stretch' : 'auto';
+    // The timer is the one thing that changes size between the two: in the
+    // header it sits beside a word, and collapsed it is the largest thing in a
+    // 96px pane because it is the only number still on screen.
+    tx.timer.style.fontSize = hidden ? '18px' : `${TYPE.caption}px`;
+    tx.timer.style.fontWeight = hidden ? '600' : '400';
+    tx.timer.style.color = hidden ? FG : FG_MUTED;
+    tx.timer.style.marginInlineStart = hidden ? '0' : '2px';
+    tx.lines.style.display = hidden ? '' : 'none';
+
+    tx.toggle.innerHTML = hidden ? window.SL_ICONS.expand : window.SL_ICONS.collapse;
     tx.toggle.title = hidden ? 'Show transcript' : 'Hide transcript';
     tx.toggle.setAttribute('aria-label', tx.toggle.title);
     tx.toggle.setAttribute('aria-expanded', String(!hidden));
+
+    renderLineCount();
+    renderArmPrompt();
     if (hidden) return;
     // A hidden list has no measurable height, so anything that arrived while it
     // was away leaves the view stale. Come back at the newest line.
@@ -1034,12 +1362,24 @@
     // The header carries what the old rail carried, inside the pane it belongs
     // to: the light, what it says, how long the call has run, and the three
     // things a rep does to a running transcript.
+    // Open, this is a header strip across the top of the pane. Collapsed, it
+    // becomes the whole pane — so it is built as two groups with a spacer
+    // between them, and renderTranscriptView() only has to turn the axis.
     const bar = document.createElement('div');
     bar.style.cssText = [
       'display:flex', 'align-items:center', `gap:${HEADER_GAP}px`, 'padding:5px 7px',
       'background:rgba(255,255,255,.035)', 'border-bottom:1px solid rgba(255,255,255,.05)',
-      'flex:0 0 auto',
+      'flex:0 0 auto', 'box-sizing:border-box', 'min-width:0',
     ].join(';');
+
+    // What the pane says about itself: the light, its word, how long, how much.
+    const meta = document.createElement('div');
+    meta.style.cssText = [
+      'display:flex', 'align-items:center', `gap:${HEADER_GAP}px`, 'flex:0 1 auto', 'min-width:0',
+    ].join(';');
+
+    const light = document.createElement('div');
+    light.style.cssText = 'display:flex;align-items:center;gap:5px;min-width:0;flex:0 0 auto';
 
     const dot = document.createElement('span');
     dot.style.cssText =
@@ -1047,32 +1387,54 @@
 
     const connection = document.createElement('span');
     connection.style.cssText = [
-      'font-weight:600', 'letter-spacing:.08em', `font-size:${TYPE.overline}px`,
-      `color:${FG_MUTED}`, 'flex:0 0 auto',
+      'font-weight:600', 'letter-spacing:.06em', `font-size:${TYPE.overline}px`,
+      `color:${FG_MUTED}`, 'flex:0 0 auto', 'white-space:nowrap',
     ].join(';');
     connection.textContent = 'OFFLINE';
 
     const timer = document.createElement('span');
     timer.style.cssText = [
       `font-size:${TYPE.caption}px`, 'font-variant-numeric:tabular-nums', `color:${FG_MUTED}`,
-      // Pushes the buttons to the far end, so the reading half and the acting
-      // half of the header sit at opposite edges.
-      'margin-inline-end:auto', 'margin-inline-start:2px', 'flex:0 0 auto',
+      'margin-inline-start:2px', 'flex:0 0 auto', 'letter-spacing:-.012em', 'line-height:1.1',
     ].join(';');
     timer.textContent = '00:00';
     timerEl = timer;
 
-    const toggle = iconButton('«', 'Hide transcript', toggleTranscriptView);
-    const pause = iconButton('⏸', 'Pause transcription', togglePause);
-    const save = iconButton('↓', 'Save transcript as text', saveFromButton);
+    // Only ever on screen collapsed, where the list is not: it is the one thing
+    // the reading was saying that the header cannot otherwise say.
+    const lines = document.createElement('span');
+    lines.style.cssText = [
+      `font-size:${TYPE.overline}px`, `color:${FG_MUTED}`, 'line-height:1',
+      'flex:0 0 auto', 'display:none', 'white-space:nowrap',
+    ].join(';');
+
+    light.appendChild(dot);
+    light.appendChild(connection);
+    meta.appendChild(light);
+    meta.appendChild(timer);
+    meta.appendChild(lines);
+
+    // Holds the two groups apart on either axis, so one rule covers both the
+    // header's left/right split and the collapsed pane's top/bottom one.
+    const spacer = document.createElement('div');
+    spacer.style.cssText = 'flex:1 1 auto';
+
+    const controls = document.createElement('div');
+    controls.style.cssText =
+      `display:flex;align-items:center;gap:${HEADER_GAP}px;flex:0 0 auto`;
+
+    const toggle = iconButton(window.SL_ICONS.collapse, 'Hide transcript', toggleTranscriptView);
+    const pause = iconButton(window.SL_ICONS.pause, 'Pause transcription', togglePause);
+    const save = iconButton(window.SL_ICONS.save, 'Save transcript as text', saveFromButton);
     save.classList.add('sl-save');
 
-    bar.appendChild(dot);
-    bar.appendChild(connection);
-    bar.appendChild(timer);
-    bar.appendChild(toggle);
-    bar.appendChild(pause);
-    bar.appendChild(save);
+    controls.appendChild(toggle);
+    controls.appendChild(pause);
+    controls.appendChild(save);
+
+    bar.appendChild(meta);
+    bar.appendChild(spacer);
+    bar.appendChild(controls);
 
     const list = document.createElement('div');
     // Selectable text, so it is not a drag handle: a drag starting in here
@@ -1097,6 +1459,41 @@
 
     const empty = emptyLine('Waiting for the call to start…');
     list.appendChild(empty);
+
+    // Capture is not armed yet. That is a Chrome rule rather than a fault —
+    // only an invocation on this tab authorises a capture of it — so it belongs
+    // where the transcript would have been, saying which key and why, rather
+    // than in the status strip, whose error colour is reserved for a call that
+    // may now be half-logged.
+    const prompt = document.createElement('div');
+    prompt.style.cssText = [
+      'display:none', 'flex:1 1 auto', 'min-height:0',
+      'flex-direction:column', 'align-items:center', 'justify-content:center',
+      'gap:5px', 'padding:0 12px', 'text-align:center',
+    ].join(';');
+
+    const promptLine = document.createElement('div');
+    promptLine.style.cssText = [
+      'display:flex', 'align-items:center', 'gap:5px', 'flex-wrap:wrap',
+      'justify-content:center', `font-size:${TYPE.alert}px`, `color:${FG_SOFT}`,
+    ].join(';');
+
+    const promptLead = document.createElement('span');
+    const promptKey = document.createElement('span');
+    promptKey.className = 'sl-key';
+    promptKey.style.cssText = `color:${FG};padding:2px 5px 2px 6px`;
+    const promptTail = document.createElement('span');
+
+    promptLine.appendChild(promptLead);
+    promptLine.appendChild(promptKey);
+    promptLine.appendChild(promptTail);
+
+    const promptWhy = document.createElement('div');
+    promptWhy.style.cssText =
+      `font-size:${TYPE.overline}px;font-style:italic;color:${FG_DIM}`;
+
+    prompt.appendChild(promptLine);
+    prompt.appendChild(promptWhy);
 
     const hint = document.createElement('button');
     hint.className = 'sl-pill';
@@ -1126,12 +1523,17 @@
 
     pane.appendChild(bar);
     pane.appendChild(list);
+    pane.appendChild(prompt);
     pane.appendChild(hint);
     wrap.appendChild(pane);
 
     for (const b of [toggle, pause, save]) window.slPressable(b);
 
-    tx = { pane, list, empty, dot, connection, timer, hint, toggle, pause, save };
+    tx = {
+      pane, list, empty, bar, meta, light, dot, connection, timer, lines,
+      hint, toggle, pause, save,
+      prompt, promptLead, promptKey, promptTail, promptWhy,
+    };
     // A rebuild (settings toggle, or replacing a stale overlay) must not lose
     // what is already on screen.
     const shown = txView.entries.slice(-MAX_RENDERED_LINES);
@@ -1209,6 +1611,7 @@
 
     if (tx.empty) { tx.empty.remove(); tx.empty = null; }
     appendEntryNode(entry);
+    renderLineCount();
     while (tx.list.childElementCount > MAX_RENDERED_LINES) tx.list.firstElementChild.remove();
 
     if (txView.autoScroll) {
@@ -1219,14 +1622,31 @@
     }
   }
 
-  function setTranscriptConnection(state) {
+  const CONNECTION_WARN = '#e0a020';
+
+  function setTranscriptConnection(state, detail) {
+    // Kept even with no pane on screen: the pane may be built later, and it has
+    // to open on the state the worker last reported rather than on OFFLINE.
+    txView.notArmed = state === 'notarmed';
+    if (state === 'notarmed') txView.armKey = String(detail || '');
     if (!tx) return;
-    const labels = { ready: 'LIVE', busy: 'LIVE', degraded: 'BEHIND', error: 'ERROR', offline: 'OFFLINE' };
-    const colors = { ready: '#ff5c4d', busy: '#ff5c4d', degraded: '#e0a020', error: '#6b6f76', offline: '#6b6f76' };
+    // NOT ARMED is its own word, in the colour for "waiting on you", because it
+    // is not an error: nothing failed, capture has simply not been authorised
+    // on this tab yet, and one keypress fixes it.
+    const labels = {
+      ready: 'LIVE', busy: 'LIVE', degraded: 'BEHIND', notarmed: 'NOT ARMED',
+      error: 'ERROR', offline: 'OFFLINE',
+    };
+    const colors = {
+      ready: '#ff5c4d', busy: '#ff5c4d', degraded: CONNECTION_WARN,
+      notarmed: CONNECTION_WARN, error: '#6b6f76', offline: '#6b6f76',
+    };
     const live = state === 'ready' || state === 'busy';
     tx.connection.textContent = labels[state] || 'OFFLINE';
-    tx.connection.style.color = live ? '#e8e6e1' : '#9aa0a6';
+    tx.connection.style.color =
+      state === 'notarmed' ? CONNECTION_WARN : live ? '#e8e6e1' : '#9aa0a6';
     tx.dot.style.background = colors[state] || '#6b6f76';
+    renderArmPrompt();
     // The rail is gone — the light now lives in the pane header, which stays
     // put when the reading is minimised, so there is nothing to mirror it onto.
     tx.dot.style.animation =
@@ -1236,7 +1656,7 @@
 
   function renderPaused() {
     if (!tx) return;
-    tx.pause.textContent = txView.paused ? '▶' : '⏸';
+    tx.pause.innerHTML = txView.paused ? window.SL_ICONS.play : window.SL_ICONS.pause;
     tx.pause.title = txView.paused ? 'Resume transcription' : 'Pause transcription';
     tx.pause.setAttribute('aria-label', tx.pause.title);
     // '' rather than 'none': an inline value would beat the stylesheet's
@@ -1260,6 +1680,7 @@
     if (!tx) return;
     clearSaveOffer();
     tx.list.textContent = '';
+    renderLineCount();
     tx.empty = emptyLine('Cleared.');
     tx.list.appendChild(tx.empty);
     tx.hint.style.display = 'none';
@@ -1374,6 +1795,7 @@
       const hotkeys = settings.hotkeys || {};
       if (pressed === hotkeys['kill-and-log']) { e.preventDefault(); killAndLog(); }
       else if (pressed === hotkeys['start-call']) { e.preventDefault(); startCall(); }
+      else if (pressed === hotkeys['not-in-service']) { e.preventDefault(); notInService(); }
     },
     true
   );

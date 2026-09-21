@@ -139,10 +139,25 @@ test('an unbound action labels as nothing at all', () => {
 
 // -------------------------------------------------------------- normalising
 test('the shipped defaults are the arrow keys, labelled as arrows', () => {
-  assert.deepStrictEqual(DEFAULTS.hotkeys, { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight' });
+  assert.deepStrictEqual(DEFAULTS.hotkeys, {
+    'kill-and-log': 'ArrowLeft',
+    'start-call': 'ArrowRight',
+    // Deliberately unbound: the third arrow is ArrowDown, which is how the rep
+    // scrolls the Salesloft page. They pick their own key in the popup.
+    'not-in-service': '',
+  });
   assert.strictEqual(slHotkeyLabel('ArrowLeft', true), '←');
   assert.strictEqual(slHotkeyLabel('ArrowRight', false), '→');
   assert.strictEqual(slHotkeyFromEvent(keyEvent('ArrowLeft')), 'ArrowLeft');
+});
+
+test('an action that ships unbound normalises to no key, not to undefined', () => {
+  // The content script and the panel both index this by action on every
+  // keypress. A missing entry there would compare undefined against a string
+  // on every keystroke rather than reading as "this action has no key".
+  const normalized = slNormalizeHotkeys(DEFAULTS.hotkeys);
+  assert.strictEqual(normalized['not-in-service'], '');
+  assert.strictEqual(slHotkeyLabel(normalized['not-in-service'], true), '');
 });
 
 test('the shipped defaults survive normalising unchanged', () => {
@@ -166,12 +181,26 @@ test('two actions cannot share one key', () => {
   assert.strictEqual(normalized['start-call'], '');
 });
 
+test('one key, one action — across all three, not just the pair', () => {
+  // The third action is the one that removes a person from a cadence, so a key
+  // it shared with another button would be the worst version of this bug.
+  const normalized = slNormalizeHotkeys({
+    'kill-and-log': 'Numpad1',
+    'start-call': 'Numpad1',
+    'not-in-service': 'Numpad1',
+  });
+  assert.strictEqual(normalized['kill-and-log'], 'Numpad1');
+  assert.strictEqual(normalized['start-call'], '');
+  assert.strictEqual(normalized['not-in-service'], '');
+});
+
 test('anything that is not a binding resolves to no key', () => {
   // Storage is synced across a rep's machines and can hold whatever an older
   // install wrote. A wrong key is worse than none: none is visible in the UI.
+  const none = Object.fromEntries(SL_HOTKEY_ACTIONS.map((action) => [action, '']));
   const normalized = slNormalizeHotkeys({ 'kill-and-log': 42, 'start-call': null });
-  assert.deepStrictEqual(normalized, { 'kill-and-log': '', 'start-call': '' });
-  assert.deepStrictEqual(slNormalizeHotkeys(undefined), { 'kill-and-log': '', 'start-call': '' });
+  assert.deepStrictEqual(normalized, none);
+  assert.deepStrictEqual(slNormalizeHotkeys(undefined), none);
 });
 
 test('a stored binding is trimmed rather than half-matched forever', () => {

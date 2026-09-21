@@ -11,6 +11,10 @@ const els = {
   floatingPanel: document.getElementById('floatingPanel'),
   pageOverlay: document.getElementById('pageOverlay'),
   disposition: document.getElementById('disposition'),
+  notInService: document.getElementById('notInService'),
+  notInServiceDisposition: document.getElementById('notInServiceDisposition'),
+  notInServiceGroup: document.getElementById('not-in-service-group'),
+  notInServiceKeys: document.getElementById('not-in-service-keys'),
   keybindNote: document.getElementById('keybind-note'),
   chromeShortcuts: document.getElementById('chrome-shortcuts'),
   alertsEnabled: document.getElementById('alertsEnabled'),
@@ -31,6 +35,9 @@ chrome.storage.sync.get(DEFAULTS, (settings) => {
   els.floatingPanel.checked = settings.floatingPanel;
   els.pageOverlay.checked = settings.pageOverlay;
   els.disposition.value = settings.disposition;
+  els.notInService.checked = settings.notInService;
+  els.notInServiceDisposition.value = settings.notInServiceDisposition;
+  syncNotInServiceGroup();
   applyHotkeys(settings.hotkeys);
   els.alertsEnabled.checked = settings.alertsEnabled;
   els.alertStrict.checked = settings.alertStrict;
@@ -68,6 +75,15 @@ function paintSwatches() {
   }
 }
 
+// The disposition and the key only mean anything with the button on, so they
+// dim and stop taking clicks with it — the switch itself stays live, because
+// that is how the rep turns it back on.
+function syncNotInServiceGroup() {
+  const off = !els.notInService.checked;
+  els.notInServiceGroup.classList.toggle('disabled-group', off);
+  els.notInServiceKeys.classList.toggle('disabled-group', off);
+}
+
 function syncTranscriptionGroup() {
   els.transcriptionGroup.classList.toggle('disabled-group', !els.transcription.checked);
 }
@@ -89,7 +105,11 @@ function syncAlertsGroup() {
 let hotkeys = slNormalizeHotkeys(DEFAULTS.hotkeys);
 let recording = null; // the action waiting for a key, or null
 
-const ACTION_NAMES = { 'kill-and-log': 'End call & log', 'start-call': 'Start the next call' };
+const ACTION_NAMES = {
+  'kill-and-log': 'End call & log',
+  'start-call': 'Start the next call',
+  'not-in-service': 'Not in service & remove',
+};
 
 const keyButtons = [...document.querySelectorAll('button.key')];
 
@@ -223,6 +243,17 @@ els.floatingPanel.addEventListener('change', () => {
 
 els.pageOverlay.addEventListener('change', () => {
   persist('pageOverlay', els.pageOverlay.checked);
+});
+
+els.notInService.addEventListener('change', () => {
+  syncNotInServiceGroup();
+  persist('notInService', els.notInService.checked);
+});
+
+els.notInServiceDisposition.addEventListener('change', () => {
+  const value = els.notInServiceDisposition.value.trim() || DEFAULTS.notInServiceDisposition;
+  els.notInServiceDisposition.value = value;
+  persist('notInServiceDisposition', value);
 });
 
 els.disposition.addEventListener('change', () => {

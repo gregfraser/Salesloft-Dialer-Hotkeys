@@ -13,6 +13,17 @@
     pageOverlay: true,
     disposition: 'No Answer',
 
+    // -- not in service --
+    // A third, smaller action: log the call with its own disposition and take
+    // the person out of the cadence, so a dead number stops coming back round.
+    // Off by default — it is the one thing here that removes a person from a
+    // cadence, and a rep who has not asked for it should not have a control
+    // that does on their plate. The disposition is separate from the one above
+    // for the same reason "No Answer" is configurable: it has to match the
+    // dropdown text exactly, and every team words this one differently.
+    notInService: false,
+    notInServiceDisposition: 'Not in Service',
+
     // -- transcription --
     // The master switch is the only choice: with it on, transcription always
     // starts when a call is detected. Saving is never automatic — a cadence is
@@ -32,10 +43,15 @@
     alertStrict: true,
 
     // -- key bindings --
-    // The keys the rep picked for the two dialer actions. See the section
+    // The keys the rep picked for the three dialer actions. See the section
     // below for why the extension keeps its own bindings at all, and why an
     // empty string (no key) is a normal value.
-    hotkeys: { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight' },
+    // 'not-in-service' ships unbound on purpose. The two arrows sit under the
+    // hand that is already on the plate, and a third arrow would be ArrowDown —
+    // which is how the rep scrolls the Salesloft page. Empty is a normal value
+    // and every surface prints no keycap for it, so the strip reads as unbound
+    // until the rep picks a key in the settings popup.
+    hotkeys: { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight', 'not-in-service': '' },
   };
 
   root.SL_DEFAULTS = DEFAULTS;
@@ -125,6 +141,43 @@
     return out;
   };
 
+  // ---------------- Icons ----------------
+  // Drawn, not typed. These were text glyphs — «, », ⏸, ↓, ⊘ — and a glyph is
+  // the wrong tool three times over on a 24px control: flex centring centres
+  // the line box rather than the ink, so the mark sits low in its own button;
+  // most of them are not in the UI font and arrive from whatever fallback the
+  // machine has, at whatever weight that font happens to draw; and the two
+  // chevrons came out as hairlines beside a solid pause bar. An inline SVG is
+  // centred by its own viewBox, keeps its stroke weight everywhere, and takes
+  // its colour from the button — so the set finally reads as one set.
+  //
+  // Constants, never anything interpolated: these go in through innerHTML.
+  const SVG_OPEN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true" focusable="false">';
+  const SVG_SOLID = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" ' +
+    'aria-hidden="true" focusable="false">';
+
+  root.SL_ICONS = {
+    collapse: `${SVG_OPEN}<path d="m18 17-5-5 5-5"/><path d="m11 17-5-5 5-5"/></svg>`,
+    expand: `${SVG_OPEN}<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></svg>`,
+    pause: `${SVG_SOLID}<rect x="7.5" y="5" width="3.5" height="14" rx="1.4"/>` +
+      '<rect x="13" y="5" width="3.5" height="14" rx="1.4"/></svg>',
+    play: `${SVG_SOLID}<path d="M8.5 5.4a1 1 0 0 1 1.5-.87l9 6.6a1 1 0 0 1 0 1.74l-9 6.6a1 1 0 0 1-1.5-.87z"/></svg>`,
+    save: `${SVG_OPEN}<path d="M12 4v10"/><path d="m7.5 10 4.5 4.5L16.5 10"/><path d="M5.5 19.5h13"/></svg>`,
+    // The floating panel's two extra controls. ⧉ and ✕ were the worst of the
+    // set: neither is in the UI font, so both arrived hairline-thin beside a
+    // solid pause bar.
+    copy: `${SVG_OPEN}<rect x="9" y="9" width="11" height="11" rx="2.2"/>` +
+      '<path d="M15.5 5.5h-11a1 1 0 0 0-1 1v9"/></svg>',
+    clear: `${SVG_OPEN}<path d="m6.5 6.5 11 11"/><path d="m17.5 6.5-11 11"/></svg>`,
+    // The third control's mark: the "no" sign, drawn at the same weight as the
+    // rest rather than borrowed from whatever font has ⊘.
+    block: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2.2" stroke-linecap="round" aria-hidden="true" focusable="false">' +
+      '<circle cx="12" cy="12" r="8.2"/><path d="m6.2 6.2 11.6 11.6"/></svg>',
+  };
+
   // ---------------- Key bindings ----------------
   // Two layers, because Chrome only offers one of them.
   //
@@ -132,7 +185,7 @@
   // another tab, and its picker takes a Ctrl or Alt combination and nothing
   // else — no number pad, and it silently leaves a command unassigned when the
   // suggested key is already taken. A rep working a cadence has one hand on the
-  // pad, so the extension also keeps its own bindings for the two dialer
+  // pad, so the extension also keeps its own bindings for the three dialer
   // actions and listens for them itself, in the Salesloft page and the floating
   // panel. Those two are the only places a key event reaches this extension, so
   // the layers sit side by side: the rep's own key where the work happens,
@@ -145,7 +198,7 @@
   //
   // Empty is a normal value: a rep who only wants the number pad clears the
   // other key, and every surface that prints a keycap prints nothing for it.
-  const HOTKEY_ACTIONS = ['kill-and-log', 'start-call'];
+  const HOTKEY_ACTIONS = ['kill-and-log', 'start-call', 'not-in-service'];
 
   root.SL_HOTKEY_ACTIONS = HOTKEY_ACTIONS;
 
@@ -311,6 +364,7 @@
       slTranscriptFilename: root.slTranscriptFilename,
       slParseTags: root.slParseTags,
       slIsContactUrl: root.slIsContactUrl,
+      SL_ICONS: root.SL_ICONS,
       slHotkeyFromEvent: root.slHotkeyFromEvent,
       slHotkeyMatches: root.slHotkeyMatches,
       slHotkeyLabel: root.slHotkeyLabel,
