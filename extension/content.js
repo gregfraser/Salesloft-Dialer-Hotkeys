@@ -317,7 +317,7 @@
       realClick(remove);
       await confirmCadenceRemoval();
 
-      setStatus(`Logged ${disposition} ✓ — removed from cadence`, 'ok');
+      setStatus(`Logged ${disposition} ✓, removed from cadence`, 'ok');
     } catch (err) {
       setStatus(`Stopped: ${err.message}. Finish manually.`, 'err');
     } finally {
@@ -1265,8 +1265,12 @@
   // pane says which key arms it, or the transcript is there to read.
   function renderArmPrompt() {
     if (!tx) return;
-    const show = txView.notArmed && !txView.minimized;
-    tx.prompt.style.display = show ? 'flex' : 'none';
+    // It stands in for the placeholder, so it appears only where the
+    // placeholder would: with lines already on screen there is something worth
+    // reading in that space, and the header's word is enough to say capture is
+    // not running. Nothing a rep has captured is ever covered by this.
+    const show = txView.notArmed && !txView.minimized && !txView.entries.length;
+    tx.prompt.style.display = show ? 'block' : 'none';
     tx.list.style.display = show || txView.minimized ? 'none' : '';
     if (!show) return;
     // Read back from chrome.commands, never the manifest's suggestion: Chrome
@@ -1274,14 +1278,20 @@
     // the key, so printing the suggested one is how a prompt comes to name a
     // shortcut the rep does not have.
     const label = window.slHotkeyLabel(txView.armKey, false);
-    tx.promptLead.textContent = label ? 'Press' : 'No shortcut arms capture yet';
+    // With no key there is no keycap between the two spans, so the whole line
+    // goes in the lead rather than leaving the tail to butt against it.
+    tx.promptLead.textContent = label ? 'Press' : 'No shortcut arms capture yet.';
     tx.promptKey.textContent = label;
     tx.promptKey.style.display = label ? '' : 'none';
-    tx.promptTail.textContent = label ? 'with Salesloft in front' : '';
-    tx.promptTail.style.display = label ? '' : 'none';
-    tx.promptWhy.textContent = label
-      ? 'Chrome only lets capture start from this tab'
-      : 'Set one at chrome://extensions/shortcuts';
+    // Short enough to hold one line in the pane's own font. The header already
+    // says NOT ARMED, so this only has to say what ends it.
+    tx.promptTail.textContent = label
+      ? 'with Salesloft in front'
+      : ' Set one at chrome://extensions/shortcuts';
+    // The whole of the explanation, one hover away rather than on screen.
+    tx.pane.title = label
+      ? `Capture is not armed. Chrome only lets it start from this tab, so ${label} has to be pressed with Salesloft in front.`
+      : 'Capture is not armed, and no Chrome shortcut is assigned to arm it. Set one at chrome://extensions/shortcuts.';
   }
 
   function renderTranscriptView() {
@@ -1460,40 +1470,35 @@
     const empty = emptyLine('Waiting for the call to start…');
     list.appendChild(empty);
 
-    // Capture is not armed yet. That is a Chrome rule rather than a fault —
-    // only an invocation on this tab authorises a capture of it — so it belongs
-    // where the transcript would have been, saying which key and why, rather
-    // than in the status strip, whose error colour is reserved for a call that
-    // may now be half-logged.
+    // Capture is not armed yet. Nothing is wrong: Chrome only lets a capture
+    // start from an invocation on this tab, so this is the ordinary state of a
+    // fresh tab and one keypress ends it. It is therefore built as the pane's
+    // own placeholder — the same corner, size and italic as "Waiting for the
+    // call to start…" — rather than as a banner across the middle. The reason
+    // it exists at all lives in the pane's tooltip; a rep who has read it once
+    // does not need it on screen for the rest of the day.
+    // A block rather than a flex row: it is a sentence with a key in the
+    // middle of it, so it has to wrap like one. A wrapping flex container
+    // spreads its rows down whatever height it is given, which on a 108px pane
+    // put half a sentence at the top and half at the bottom.
     const prompt = document.createElement('div');
     prompt.style.cssText = [
-      'display:none', 'flex:1 1 auto', 'min-height:0',
-      'flex-direction:column', 'align-items:center', 'justify-content:center',
-      'gap:5px', 'padding:0 12px', 'text-align:center',
-    ].join(';');
-
-    const promptLine = document.createElement('div');
-    promptLine.style.cssText = [
-      'display:flex', 'align-items:center', 'gap:5px', 'flex-wrap:wrap',
-      'justify-content:center', `font-size:${TYPE.alert}px`, `color:${FG_SOFT}`,
+      'display:none', 'flex:1 1 auto', 'min-height:0', 'padding:7px 9px',
+      `font-size:${TYPE.caption}px`, 'font-style:italic', `color:${FG_MUTED}`,
+      `line-height:${LEADING.read}`, 'text-wrap:pretty',
     ].join(';');
 
     const promptLead = document.createElement('span');
     const promptKey = document.createElement('span');
     promptKey.className = 'sl-key';
-    promptKey.style.cssText = `color:${FG};padding:2px 5px 2px 6px`;
+    // The one part of the line that is not italic grey: it is the thing the rep
+    // acts on, and a keycap set in the surrounding italic stops reading as a key.
+    promptKey.style.cssText = `color:${FG_SOFT};font-style:normal;margin:0 4px`;
     const promptTail = document.createElement('span');
 
-    promptLine.appendChild(promptLead);
-    promptLine.appendChild(promptKey);
-    promptLine.appendChild(promptTail);
-
-    const promptWhy = document.createElement('div');
-    promptWhy.style.cssText =
-      `font-size:${TYPE.overline}px;font-style:italic;color:${FG_DIM}`;
-
-    prompt.appendChild(promptLine);
-    prompt.appendChild(promptWhy);
+    prompt.appendChild(promptLead);
+    prompt.appendChild(promptKey);
+    prompt.appendChild(promptTail);
 
     const hint = document.createElement('button');
     hint.className = 'sl-pill';
@@ -1532,7 +1537,7 @@
     tx = {
       pane, list, empty, bar, meta, light, dot, connection, timer, lines,
       hint, toggle, pause, save,
-      prompt, promptLead, promptKey, promptTail, promptWhy,
+      prompt, promptLead, promptKey, promptTail,
     };
     // A rebuild (settings toggle, or replacing a stale overlay) must not lose
     // what is already on screen.
@@ -1612,6 +1617,7 @@
     if (tx.empty) { tx.empty.remove(); tx.empty = null; }
     appendEntryNode(entry);
     renderLineCount();
+    renderArmPrompt();
     while (tx.list.childElementCount > MAX_RENDERED_LINES) tx.list.firstElementChild.remove();
 
     if (txView.autoScroll) {
@@ -1643,9 +1649,12 @@
     };
     const live = state === 'ready' || state === 'busy';
     tx.connection.textContent = labels[state] || 'OFFLINE';
-    tx.connection.style.color =
-      state === 'notarmed' ? CONNECTION_WARN : live ? '#e8e6e1' : '#9aa0a6';
+    // Amber on the dot only. The word in amber read as a warning about a state
+    // that is not one, and it was the loudest thing on a plate whose whole job
+    // is to stay out of the way mid-call.
+    tx.connection.style.color = live ? '#e8e6e1' : '#9aa0a6';
     tx.dot.style.background = colors[state] || '#6b6f76';
+    if (state !== 'notarmed') tx.pane.title = '';
     renderArmPrompt();
     // The rail is gone — the light now lives in the pane header, which stays
     // put when the reading is minimised, so there is nothing to mirror it onto.

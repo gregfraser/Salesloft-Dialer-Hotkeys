@@ -194,11 +194,13 @@ function setConnection(state, detail) {
     // in `detail`, so this says what actually arms capture rather than what the
     // manifest once suggested. Empty means Chrome assigned nothing.
     const key = self.slHotkeyLabel(detail, false);
+    // No 'warn' colour. This is the ordinary state of a fresh tab, not
+    // something that went wrong, and the panel's amber belongs to the things
+    // that did.
     setStatus(
       key
-        ? `Not armed — press ${key} with the Salesloft tab in front`
-        : 'Not armed — no shortcut assigned at chrome://extensions/shortcuts',
-      'warn'
+        ? `Not armed: press ${key} with the Salesloft tab in front`
+        : 'Not armed, and no shortcut is assigned at chrome://extensions/shortcuts'
     );
     return;
   }

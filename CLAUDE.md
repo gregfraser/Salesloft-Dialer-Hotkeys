@@ -271,17 +271,23 @@ When Salesloft ships UI changes, these are what break.
   side — at the row's full `PANEL_HEIGHT`, with the timer enlarged because it is the only number left on
   screen and a line count standing in for the reading that is not. It must never go to `height:auto`; that
   left a header hanging at the top of a 108px row with bare plate under it, the one place on this plate
-  where a control did not end where its neighbour did.
-- **"Not armed" is a state, not an error.** Capture arming is a Chrome constraint, so the pre-state before
-  a rep has armed once is normal and one keypress fixes it. It reports as its own `notarmed` state in
-  amber, keeps out of the status strip — whose error colour belongs to a call that may now be half-logged —
-  and says which key **read back from `chrome.commands`**, never the manifest's `suggested_key`. Hard-coding
-  `Ctrl+Shift+8` there is the same defect as hard-coding `Ctrl⇧9` on a button, and it is `armingKey()` in
-  `background.js` that keeps it honest. The design prototype draws the pane open only and
+  where a control did not end where its neighbour did. The design prototype draws the pane open only and
   collapses it to zero width, which would take the restore control with it; collapsing to the header is
   the smallest thing that keeps its shape without putting a control out of reach. The flag lives in
   `txView` rather than storage, so it survives an overlay rebuild (a settings toggle, a stale copy being
   replaced) but not a page reload.
+- **"Not armed" is a state, not an error, and it is drawn like one.** Capture arming is a Chrome
+  constraint, so the pre-state before a rep has armed once is normal and one keypress ends it. It reports
+  as its own `notarmed` state and says which key **read back from `chrome.commands`**, never the manifest's
+  `suggested_key` — hard-coding `Ctrl+Shift+8` there is the same defect as hard-coding `Ctrl⇧9` on a
+  button, and `armingKey()` in `background.js` is what keeps it honest. How loudly it says so is the rest
+  of the invariant, and the bar is low: it is the pane's own **placeholder**, in the same corner, size and
+  italic grey as "Waiting for the call to start…", so it occupies space that had nothing in it. It never
+  covers captured lines (with entries on screen the header word carries it alone), it stays out of the
+  status strip — whose error colour belongs to a call that may now be half-logged — the explanation of
+  *why* Chrome works this way lives in the pane's tooltip rather than on screen, and the only colour
+  anywhere is the header dot. A banner across the pane, an amber word, or the status strip are each a
+  louder answer than a normal state deserves.
 - **Nothing renders over the Salesloft page.** The contact alert appears only in the floating panel and as the tinted line inside the overlay (`window.__slOnContactAlert`); do not bring back a floating toast.
 - **The overlay belongs to a contact, not to Salesloft.** It is drawn only where one person is on screen — `slIsContactUrl()` in `defaults.js` matches the route (`/app/people/{id}` and friends, never the People list), and `content.js` falls back to the DOM (`[data-testid="popout-logger-container"]`, `person-detail*`) so the logger popout keeps the buttons wherever the rep dialled from. Salesloft is a single-page app, so `syncOverlay()` re-decides on every re-render rather than once at injection, and it never removes the overlay while `busy` — a flow mid-way through logging a call keeps its status line.
 
