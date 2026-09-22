@@ -1,0 +1,101 @@
+import { chromium } from 'playwright';
+// CHROMIUM_PATH is for a machine where Playwright's own download is not
+// where it expects; normally Playwright finds its browser itself.
+const browser = await chromium.launch(
+  process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}
+);
+const HERE = import.meta.dirname;
+let pass = 0, fail = 0; const errs = [];
+const check = (n, ok, d) => ok ? (pass++, console.log('  ok   ' + n))
+  : (fail++, errs.push(n), console.log('  FAIL ' + n + (d ? '\n         ' + d : '')));
+const eq = (n, a, e) => check(n, JSON.stringify(a) === JSON.stringify(e),
+  `expected ${JSON.stringify(e)}\n         actual   ${JSON.stringify(a)}`);
+
+async function open(settings, mockOpts) {
+  const page = await browser.newPage({ viewport: { width: 900, height: 500 } });
+  page.on('pageerror', (e) => { fail++; errs.push('pageerror: ' + e.message); console.log('  PAGE ERROR: ' + e.message); });
+  await page.addInitScript((s) => { window.__slSettings = s; window.__slCommandKeys = {}; }, settings);
+  await page.goto('file://' + HERE + '/mock.html');
+  await page.waitForTimeout(250);
+  if (mockOpts) { await page.evaluate((o) => window.__buildSalesloft(o), mockOpts); await page.waitForTimeout(50); }
+  return page;
+}
+const acted = (p) => p.evaluate(() => window.__acted);
+const statusText = (p) => p.evaluate(() => {
+  const b = document.getElementById('sl-hotkey-overlay');
+  return b ? b.lastElementChild.querySelector('div').textContent : null;
+});
+const act = (p, action) => p.evaluate((a) =>
+  window.__slOnMessage({ type: 'dialer-action', action: a }, null, () => {}), action);
+
+console.log('\nThe two flows I did not touch');
+{
+  const p = await open({ pageOverlay: true, notInService: true }, { inCall: true });
+  await act(p, 'kill-and-log');
+  await p.waitForTimeout(2000);
+  eq('kill-and-log still ends, dispositions and completes', await acted(p),
+     ['End Call', 'disposition=No Answer', 'Log & Complete']);
+  const s = await statusText(p);
+  check('and still says it logged', s.includes('Logged No Answer'), 'status was: ' + s);
+  await p.close();
+}
+{
+  // "Call" has to be found by its exact visible text, and the mock's other
+  // buttons must not satisfy that.
+  const p = await open({ pageOverlay: true, notInService: true }, {});
+  await p.evaluate(() => {
+    const b = document.createElement('button');
+    b.textContent = 'Call';
+    b.addEventListener('click', () => window.__acted.push('Call'));
+    document.getElementById('app').appendChild(b);
+  });
+  await act(p, 'start-call');
+  await p.waitForTimeout(600);
+  eq('start-call still dials', await acted(p), ['Call']);
+  await p.close();
+}
+{
+  const p = await open({ pageOverlay: true, notInService: true }, {});
+  await act(p, 'kill-and-log');
+  await p.waitForTimeout(300);
+  // The pair must still be gated while a flow runs.
+  const busy = await p.evaluate(() => document.getElementById('sl-hotkey-overlay').classList.contains('sl-busy'));
+  check('the busy class still lands on the plate', busy);
+  await p.close();
+}
+
+console.log('\nToggling the setting live');
+{
+  const p = await open({ pageOverlay: true, notInService: false }, {});
+  check('starts with no strip', (await p.$('#sl-hotkey-overlay .sl-second')) === null);
+  await p.evaluate(() => window.__slOnStorage({ notInService: { newValue: true } }, 'sync'));
+  await p.waitForTimeout(300);
+  check('turning it on rebuilds the plate with the strip', (await p.$('#sl-hotkey-overlay .sl-second')) !== null);
+  const pair = await p.evaluate(() => [...document.querySelectorAll('#sl-hotkey-overlay .sl-act')]
+    .map((b) => Math.round(b.getBoundingClientRect().width)));
+  eq('and the pair is still equal and unchanged', pair, [104, 104]);
+  await p.evaluate(() => window.__slOnStorage({ notInService: { newValue: false } }, 'sync'));
+  await p.waitForTimeout(300);
+  check('turning it off takes it away again', (await p.$('#sl-hotkey-overlay .sl-second')) === null);
+  await p.close();
+}
+{
+  // Arming, then losing the control to a rebuild, must not leave a press made.
+  const p = await open({ pageOverlay: true, notInService: true }, {});
+  await p.click('#sl-hotkey-overlay .sl-second');
+  await p.waitForTimeout(150);
+  await p.evaluate(() => window.__slOnStorage({ transcription: { newValue: true } }, 'sync'));
+  await p.waitForTimeout(300);
+  const label = await p.textContent('#sl-hotkey-overlay .sl-second .sl-second-label');
+  check('a rebuild mid-arm disarms rather than carrying the press over', label === 'Not in Service',
+        'label was: ' + label);
+  await p.click('#sl-hotkey-overlay .sl-second');
+  await p.waitForTimeout(800);
+  eq('so the next press arms rather than committing', await acted(p), []);
+  await p.close();
+}
+
+console.log(`\n${pass} passed, ${fail} failed`);
+if (fail) console.log('failures:\n  ' + errs.join('\n  '));
+await browser.close();
+process.exit(fail ? 1 : 0);

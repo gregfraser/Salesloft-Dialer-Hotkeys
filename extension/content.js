@@ -111,7 +111,21 @@
   }
 
   // ---------------- DOM helpers ----------------
+  // Good for anything *inside* a container — which is every control this
+  // extension clicks — but not for a container that is itself positioned:
+  // offsetParent is null for a position:fixed element, so a modal read as
+  // hidden however plainly it is on screen. isShown() below is for those.
   const visible = (el) => !!el && el.offsetParent !== null && !el.disabled;
+
+  // Is this element actually on screen? Measured rather than inferred, because
+  // the one place it is needed is a modal, and a modal is position:fixed.
+  function isShown(el) {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+    const style = getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+  }
 
   const loggerRoot = () =>
     document.querySelector('[data-testid="popout-logger-container"]') || document;
@@ -225,12 +239,18 @@
     'yes, remove', 'yes',
   ];
 
-  async function confirmCadenceRemoval() {
+  const DIALOGS = '[role="dialog"],[role="alertdialog"]';
+
+  // `existing` is whatever was already open when the removal was clicked.
+  // Salesloft's own logger popout carries role="dialog", so without that
+  // snapshot this matched the popout the flow had just been driving, found no
+  // button it recognised, and reported a removal that had in fact succeeded as
+  // "Stopped: … Finish manually."
+  async function confirmCadenceRemoval(existing) {
     let dialog;
     try {
       dialog = await waitFor(
-        () => [...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')]
-          .find((d) => d.offsetParent !== null),
+        () => [...document.querySelectorAll(DIALOGS)].find((d) => !existing.has(d) && isShown(d)),
         CONFIG.confirmTimeout
       );
     } catch (e) {
@@ -290,7 +310,10 @@
   // it wrong. The removal is last for the same reason — a person who is out of
   // the cadence with no call logged against them is the worse half-state.
   async function runNotInService() {
-    if (busy) return;
+    // Gated here as well as at the control, because the panel and the worker
+    // can both reach this directly and a stale window must not drive a feature
+    // that has since been turned off.
+    if (busy || !settings.notInService) return;
     setBusy(true);
     const disposition = settings.notInServiceDisposition || 'Not in Service';
     try {
@@ -314,8 +337,11 @@
 
       setStatus('Removing from cadence…');
       const remove = await waitFor(removeFromCadenceButton);
+      // Snapshot first: only a dialog that was not already open can be this
+      // removal's own.
+      const openDialogs = new Set(document.querySelectorAll(DIALOGS));
       realClick(remove);
-      await confirmCadenceRemoval();
+      await confirmCadenceRemoval(openDialogs);
 
       setStatus(`Logged ${disposition} ✓, removed from cadence`, 'ok');
     } catch (err) {
@@ -344,6 +370,15 @@
 
   function notInService() {
     if (busy || !settings.notInService) return;
+    // The arming *is* the confirmation, so it has to be somewhere the rep can
+    // see it. With the on-page controls off there is no strip to turn red, and
+    // arming silently would mean a second keypress removing someone from a
+    // cadence with nothing having asked. The panel confirms on its own surface
+    // and commits directly, so it never lands here.
+    if (!nis) {
+      setStatus('Not in Service needs the on-page buttons or the floating panel', 'err');
+      return;
+    }
     if (!armed) {
       armed = true;
       clearTimeout(armHandle);
@@ -381,7 +416,15 @@
     if (msg.type === 'dialer-action') {
       if (msg.action === 'kill-and-log') killAndLog();
       if (msg.action === 'start-call') startCall();
-      if (msg.action === 'not-in-service') notInService();
+      // `confirmed` means the rep already answered the question on the surface
+      // they were looking at — the floating panel arms and confirms itself.
+      // Without this the panel's confirming press only armed the content
+      // script, so the removal took four presses rather than two and the last
+      // two had to land inside a 3s window.
+      if (msg.action === 'not-in-service') {
+        if (msg.confirmed) runNotInService();
+        else notInService();
+      }
     }
 
     // Transcription traffic, relayed by the background worker: content scripts
@@ -559,6 +602,7 @@
     minimized: false,      // the pane is hidden; everything else carries on
     notArmed: false,       // Chrome has not authorised a capture of this tab yet
     armKey: '',            // and this is the key that would, as Chrome has it
+    connection: 'offline', // what the worker last said, so a rebuilt pane opens on it
     unsaved: false,        // lines added since the last save
     pendingNewCall: false, // draw a divider before the next call's first line
     startedAt: 0,
@@ -1548,6 +1592,11 @@
       for (const entry of shown) appendEntryNode(entry);
     }
     renderPaused();
+    // A rebuilt pane opens on the state the worker last reported, the same way
+    // a rebuilt overlay opens on "Connected" rather than "Ready". Without this
+    // the header hard-coded OFFLINE while the body still showed the arming
+    // prompt underneath it.
+    setTranscriptConnection(txView.connection, txView.armKey);
     return wrap;
   }
 
@@ -1634,6 +1683,7 @@
     // Kept even with no pane on screen: the pane may be built later, and it has
     // to open on the state the worker last reported rather than on OFFLINE.
     txView.notArmed = state === 'notarmed';
+    txView.connection = state || 'offline';
     if (state === 'notarmed') txView.armKey = String(detail || '');
     if (!tx) return;
     // NOT ARMED is its own word, in the colour for "waiting on you", because it

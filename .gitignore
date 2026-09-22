@@ -2,3 +2,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+
+# Installed on demand by tests/browser/README.md; not part of the extension.
+tests/browser/node_modules/
+tests/browser/package.json
+tests/browser/package-lock.json

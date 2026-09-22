@@ -1,0 +1,136 @@
+<!doctype html><html><head><meta charset="utf-8"><title>mock salesloft</title>
+<style>body{margin:0;background:#1b1f24;font-family:system-ui,sans-serif;color:#ddd}
+#log{position:fixed;top:0;right:0;width:300px;font:11px monospace;color:#8f8;white-space:pre}</style>
+</head><body>
+<div id="app"></div>
+<div id="log"></div>
+<script>
+// ---- what the flow did, in order ----
+window.__acted = [];
+const note = (s) => { window.__acted.push(s); document.getElementById('log').textContent = window.__acted.join('\n'); };
+
+// ---- a stand-in for the parts of Salesloft this flow touches ----
+// Structure and accessible names only; no generated class names, same as the
+// extension's own rule.
+window.__buildSalesloft = (opts = {}) => {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  window.__acted = [];
+
+  const logger = document.createElement('div');
+  logger.setAttribute('data-testid', 'popout-logger-container');
+  if (opts.loggerIsDialog) logger.setAttribute('role', 'dialog');
+  app.appendChild(logger);
+
+  if (opts.inCall) {
+    const end = document.createElement('button');
+    end.textContent = 'End Call';
+    end.addEventListener('click', () => { note('End Call'); end.remove(); });
+    logger.appendChild(end);
+  }
+
+  // Disposition: a Downshift-shaped combobox. The toggle is found by sitting
+  // near the word "Disposition"; the options are portalled to the body.
+  const dispWrap = document.createElement('div');
+  const dispLabel = document.createElement('div');
+  dispLabel.textContent = 'Disposition';
+  const dispInner = document.createElement('div');
+  const toggle = document.createElement('button');
+  toggle.id = 'downshift-1-toggle-button';
+  toggle.setAttribute('aria-haspopup', 'listbox');
+  toggle.textContent = 'Select…';
+  dispInner.appendChild(toggle);
+  dispWrap.appendChild(dispLabel);
+  dispWrap.appendChild(dispInner);
+  logger.appendChild(dispWrap);
+
+  const OPTIONS = opts.dispositions || ['No Answer', 'Not in Service', 'Left Voicemail'];
+  toggle.addEventListener('click', () => {
+    if (document.getElementById('disp-list')) return;
+    const ul = document.createElement('ul');
+    ul.id = 'disp-list';
+    ul.setAttribute('role', 'listbox');
+    for (const name of OPTIONS) {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.textContent = name;
+      li.addEventListener('click', () => { note('disposition=' + name); toggle.textContent = name; ul.remove(); });
+      ul.appendChild(li);
+    }
+    document.body.appendChild(ul);
+  });
+
+  // The split button: "Log & Complete" plus a caret whose menu holds "Log Only".
+  const logBtn = document.createElement('button');
+  logBtn.textContent = 'Log & Complete';
+  logBtn.addEventListener('click', () => note('Log & Complete'));
+  logger.appendChild(logBtn);
+
+  if (!opts.noMenuToggle) {
+    const caret = document.createElement('button');
+    caret.setAttribute('data-testid', 'menuToggle');
+    caret.setAttribute('aria-label', 'Open Log only or complete only menu');
+    caret.textContent = '▾';
+    caret.addEventListener('click', () => {
+      if (document.getElementById('log-menu')) return;
+      const ul = document.createElement('ul');
+      ul.id = 'log-menu';
+      for (const name of ['Log Only', 'Complete Only']) {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'menuitem');
+        li.textContent = name;
+        li.addEventListener('click', () => { note(name); ul.remove(); });
+        ul.appendChild(li);
+      }
+      document.body.appendChild(ul);
+      note('menu opened');
+    });
+    logger.appendChild(caret);
+  }
+
+  // The cadence control, outside the logger, named only by aria-label.
+  if (!opts.noRemove) {
+    const remove = document.createElement('button');
+    remove.setAttribute('aria-label', opts.removeLabel || 'Remove person from cadence');
+    remove.innerHTML = '<svg width="10" height="10"></svg>';
+    remove.addEventListener('click', () => {
+      note('remove from cadence');
+      if (!opts.confirm) return;
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      dialog.style.cssText = 'position:fixed;inset:30% 30%;background:#333;z-index:10';
+      for (const name of (opts.confirmButtons || ['Cancel', 'Remove'])) {
+        const b = document.createElement('button');
+        b.textContent = name;
+        b.addEventListener('click', () => { note('dialog:' + name); dialog.remove(); });
+        dialog.appendChild(b);
+      }
+      document.body.appendChild(dialog);
+      note('dialog opened');
+    });
+    app.appendChild(remove);
+  }
+};
+
+// ---- chrome stub ----
+window.__slSettings = window.__slSettings || {};
+window.chrome = {
+  runtime: {
+    id: 'harness',
+    sendMessage: (m, cb) => { if (m && m.type === 'command-keys' && cb) cb({ keys: window.__slCommandKeys || {} }); return Promise.resolve(); },
+    onMessage: { addListener: (fn) => { window.__slOnMessage = fn; } },
+    lastError: null,
+  },
+  storage: {
+    sync: { get: (d, cb) => setTimeout(() => cb(Object.assign({}, d, window.__slSettings)), 0), set: () => {} },
+    local: { get: (d, cb) => setTimeout(() => cb(d), 0), set: () => {} },
+    onChanged: { addListener: (fn) => { window.__slOnStorage = fn; } },
+  },
+};
+window.__buildSalesloft();
+</script>
+<script src="../../extension/defaults.js"></script>
+<script src="../../extension/spring.js"></script>
+<script src="../../extension/call-detect.js"></script>
+<script src="../../extension/content.js"></script>
+</body></html>

@@ -38,6 +38,24 @@ node --test tests/test_contact_alert.js        # tag matching (7)
 
 `node --test tests/` does **not** work — the directory is named `tests` and the files use underscores, so neither matches Node's default discovery patterns. Name the file explicitly.
 
+The DOM automation is the part most likely to break and the part `node --test`
+cannot reach, so it has a browser suite of its own in `tests/browser/`
+(Playwright, installed there on demand — the extension keeps no `package.json`,
+and git ignores whatever npm writes in that directory):
+
+```bash
+cd tests/browser && npm install playwright && npx playwright install chromium
+node behaviour.mjs   # the Not in Service flow, the collapsed pane, the not-armed state (42)
+node regress.mjs     # kill-and-log, start-call, and toggling a setting live (10)
+```
+
+`mock.html` is a Salesloft-shaped page built from structure and accessible
+names only, never a generated class — the same rule `content.js` follows. Make
+it as awkward as the real page: its `confirm` dialog is `position:fixed` and
+its `loggerIsDialog` option gives the popout `role="dialog"`, because each of
+those caught a bug that the unit tests and a screenshot both missed. See
+`tests/browser/README.md`.
+
 The Python tests need only `numpy pytest pyyaml fastapi httpx`. faster-whisper, torch and Silero are imported lazily inside methods precisely so the whole suite runs without them; keep it that way when adding code. `tests/conftest.py` puts `server/` on the path because the service modules import each other by bare name (they run package-less under uvicorn).
 
 Running the service:
@@ -76,6 +94,11 @@ package to `~ip` and regenerates the shim last — interrupt it and `pip.exe` is
 gone while `python -m pip` still works.
 
 ## Verifying extension changes
+
+`tests/browser/` drives the flows against a mock page and catches most
+selector and state bugs; it is not a substitute for the pass below, which is
+the only thing that exercises real Salesloft, real tab capture and the real
+audio path.
 
 Manual, against the live Salesloft app:
 
@@ -182,7 +205,7 @@ Content scripts receive none of those broadcasts, so the on-page transcript is f
 `content.js` drives Salesloft's React UI with no API access:
 
 - Buttons found by exact (case-insensitive, whitespace-collapsed) visible text — "End Call", "Log & Complete", "Call" — scoped to `[data-testid="popout-logger-container"]` when logging.
-- `not-in-service` takes a different branch of the same UI, and its steps come from a recording of the flow done by hand rather than from guesswork: the split button's caret (`[data-testid="menuToggle"]`, accessible name "Open Log only or complete only menu") → the menu's "Log Only" → the cadence's own control, matched on the accessible name "Remove person from cadence" because it is an icon button with no text. A confirmation dialog may or may not follow; its *absence* is a normal outcome (hence `CONFIG.confirmTimeout`, 1.5s, not the 8s step timeout), but a dialog that appears with no recognised button throws rather than being left open.
+- `not-in-service` takes a different branch of the same UI, and its steps come from a recording of the flow done by hand rather than from guesswork: the split button's caret (`[data-testid="menuToggle"]`, accessible name "Open Log only or complete only menu") → the menu's "Log Only" → the cadence's own control, matched on the accessible name "Remove person from cadence" because it is an icon button with no text. A confirmation dialog may or may not follow; its *absence* is a normal outcome (hence `CONFIG.confirmTimeout`, 1.5s, not the 8s step timeout), but a dialog that appears with no recognised button throws rather than being left open. Two rules make that work and both were bugs first: the dialog is found with `isShown()` rather than `visible()`, because **`offsetParent` is null for a `position:fixed` element** and every modal is one — `visible()` stays correct for the controls *inside* a container and wrong for the container itself; and only a dialog that was **not already open** when the removal was clicked counts, because Salesloft's own logger popout carries `role="dialog"` and a document-wide lookup matched the popout the flow had just been driving.
 - The disposition dropdown is a Downshift combobox, located via `[id$="toggle-button"]` / `[aria-haspopup="listbox"]` near the text "Disposition"; the option is matched against the `disposition` setting exactly.
 - `realClick()` dispatches the full pointerdown → mousedown → pointerup → mouseup → click sequence because React controls ignore a bare `.click()`.
 - `waitFor()` polls every 100 ms with an 8 s timeout.
@@ -204,7 +227,7 @@ When Salesloft ships UI changes, these are what break.
 **Dialer**
 
 - `killAndLog` sets the disposition **before** clicking "Log & Complete". Any failed step throws, surfaces "Stopped: … Finish manually.", and leaves the call unlogged — never log with a wrong or missing disposition. `runNotInService` keeps the same rule and adds one: the cadence removal goes **last**, because a person removed from a cadence with no call logged against them is the worse half-state of the two.
-- **The third control arms before it fires, and that is its confirmation.** `not-in-service` is the only thing in this extension that takes a person out of a cadence, and undoing it means finding them and adding them back by hand. A modal is out (nothing here steals focus mid-call), so the control itself asks: one press turns it red and changes its label to "Remove from cadence?", a second within 3s commits, and the window lapses on its own. Both surfaces implement it, and both disarm when the overlay is replaced or the setting goes off — a press half-made against a control that is no longer there must not survive.
+- **The third control arms before it fires, and that is its confirmation.** `not-in-service` is the only thing in this extension that takes a person out of a cadence, and undoing it means finding them and adding them back by hand. A modal is out (nothing here steals focus mid-call), so the control itself asks: one press turns it red and changes its label to "Remove from cadence?", a second within 3s commits, and the window lapses on its own. Both surfaces implement it, and both disarm when the overlay is replaced or the setting goes off — a press half-made against a control that is no longer there must not survive. **Whoever asked the question owns the answer**: the panel confirms on its own surface and sends `confirmed: true`, which the content script runs straight through, because arming a second time there made the panel's confirming press do nothing and put the real commit two presses later inside a 3s window. And arming never happens where it cannot be seen — with the on-page controls off there is no strip to turn red, so `notInService()` refuses rather than letting a second keypress remove someone with nothing having asked.
 - **It is off by default and it sits below the pair, never beside it.** Putting a third button in the row would take width from the two buttons a rep aims at all day; below, the pair keeps its exact 214×108 and the button column still ends on the same line as the transcript pane. Turning it on costs 34px of plate and nothing else. Its disposition is its own setting for the same reason `disposition` is one: it has to match Salesloft's dropdown text exactly.
 - A `busy` flag serializes flows; hotkeys and clicks are ignored while one runs.
 - In-page key bindings are suppressed while typing (`isTyping()`) — which is what makes a bare letter a usable binding at all — and ignore auto-repeat, so a held key cannot queue flows behind `busy`.

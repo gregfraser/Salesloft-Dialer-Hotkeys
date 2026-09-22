@@ -41,8 +41,10 @@ const view = {
 };
 
 // ------------------------------------------------------------ dialer actions
-function send(action) {
-  chrome.runtime.sendMessage({ type: 'dialer-action', action }).catch(() => {
+// `extra` carries anything the action needs beyond its name — today only
+// `confirmed`, which says the rep already answered on this surface.
+function send(action, extra) {
+  chrome.runtime.sendMessage(Object.assign({ type: 'dialer-action', action }, extra)).catch(() => {
     setStatus('Background not reachable — reload extension', 'err');
   });
 }
@@ -90,7 +92,9 @@ function notInService() {
     return;
   }
   disarm();
-  send('not-in-service');
+  // Confirmed here, on the surface the rep was looking at. The content script
+  // would otherwise arm a second time and swallow this press.
+  send('not-in-service', { confirmed: true });
 }
 
 els.notInService.addEventListener('click', notInService);
