@@ -1,0 +1,239 @@
+<!doctype html><html><head><meta charset="utf-8"><title>mock salesloft</title>
+<style>body{margin:0;background:#1b1f24;font-family:system-ui,sans-serif;color:#ddd}
+#log{position:fixed;top:0;right:0;width:300px;font:11px monospace;color:#8f8;white-space:pre}</style>
+</head><body>
+<div id="app"></div>
+<div id="log"></div>
+<script>
+// ---- what the flow did, in order ----
+window.__acted = [];
+const note = (s) => { window.__acted.push(s); document.getElementById('log').textContent = window.__acted.join('\n'); };
+
+// ---- a stand-in for the parts of Salesloft this flow touches ----
+// Structure and accessible names only; no generated class names, same as the
+// extension's own rule.
+window.__buildSalesloft = (opts = {}) => {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  window.__acted = [];
+
+  // A contact's own view, unless the case is explicitly the cadence People
+  // list — where the logger popout is open over 170 rows with nothing dialled.
+  app.removeAttribute('data-testid');
+  if (!opts.listPage) app.setAttribute('data-testid', 'person-detail-pane');
+
+  // A contact who has been dialled a dozen times has an activity feed and a
+  // cadence sidebar full of list items whose entire text is the very
+  // disposition the flow is looking for. This is the page as it really is, not
+  // an empty one.
+  if (opts.decoys !== false) {
+    const feed = document.createElement('ul');
+    for (const text of (opts.decoyTexts || ['Not in Service', 'No Answer', 'Not in Service'])) {
+      const li = document.createElement('li');
+      li.textContent = text;
+      li.addEventListener('click', () => note('DECOY CLICKED: ' + text));
+      feed.appendChild(li);
+    }
+    app.appendChild(feed);
+  }
+
+  const logger = document.createElement('div');
+  logger.setAttribute('data-testid', 'popout-logger-container');
+  if (opts.loggerIsDialog) logger.setAttribute('role', 'dialog');
+  app.appendChild(logger);
+
+  if (opts.inCall) {
+    const end = document.createElement('button');
+    end.textContent = 'End Call';
+    end.addEventListener('click', () => { note('End Call'); end.remove(); });
+    logger.appendChild(end);
+  }
+
+  // Disposition: a Downshift-shaped combobox. The toggle is found by sitting
+  // near the word "Disposition"; the options are portalled to the body.
+  const dispWrap = document.createElement('div');
+  const dispLabel = document.createElement('div');
+  dispLabel.textContent = 'Disposition';
+  const dispInner = document.createElement('div');
+  const toggle = document.createElement('button');
+  toggle.id = 'downshift-1-toggle-button';
+  toggle.setAttribute('aria-haspopup', 'listbox');
+  toggle.setAttribute('aria-controls', 'disp-list');
+  toggle.textContent = opts.dispositionPreset || 'Select…';
+  dispInner.appendChild(toggle);
+  dispWrap.appendChild(dispLabel);
+  dispWrap.appendChild(dispInner);
+  logger.appendChild(dispWrap);
+
+  const OPTIONS = opts.dispositions || ['No Answer', 'Not in Service', 'Left Voicemail'];
+
+  // The combobox as Downshift really renders it. The menu element is always in
+  // the DOM: getMenuProps() has to land on something, so a closed menu is an
+  // empty listbox with no height rather than no listbox at all. The toggle names
+  // nothing, the options sit under "Frequently Used" / "A-Z" headers, and
+  // opening it re-renders an unrelated list elsewhere, as a React page will.
+  // The flow recorded every list on the page before its click and treated all
+  // of them as "not the one it opened", this one included, so it took the
+  // unrelated list for the menu and stopped on `could not find "No Answer"`
+  // with the option plainly on screen.
+  if (opts.downshiftMenu) {
+    toggle.removeAttribute('id');
+    toggle.removeAttribute('aria-controls');
+    const menu = document.createElement('ul');
+    menu.id = 'downshift-7-menu';
+    menu.setAttribute('role', 'listbox');
+    dispWrap.appendChild(menu);
+    const pick = (name) => {
+      note('disposition=' + name);
+      if (opts.dispositionSticks !== false) toggle.textContent = name;
+      menu.innerHTML = '';
+    };
+    toggle.addEventListener('click', () => {
+      if (menu.children.length) return;
+      const groups = [['Frequently Used', OPTIONS.slice(0, 2)], ['A-Z', OPTIONS]];
+      for (const [header, names] of groups) {
+        const h = document.createElement('li');
+        h.textContent = header;
+        menu.appendChild(h);
+        for (const name of names) {
+          const li = document.createElement('li');
+          li.setAttribute('role', 'option');
+          li.textContent = name;
+          li.addEventListener('click', () => pick(name));
+          menu.appendChild(li);
+        }
+      }
+      const other = document.createElement('ul');
+      const item = document.createElement('li');
+      item.textContent = 'Call 4';
+      other.appendChild(item);
+      app.insertBefore(other, app.firstChild);
+    });
+  } else toggle.addEventListener('click', () => {
+    if (document.getElementById('disp-list')) return;
+    const ul = document.createElement('ul');
+    ul.id = 'disp-list';
+    ul.setAttribute('role', 'listbox');
+    for (const name of OPTIONS) {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.textContent = name;
+      li.addEventListener('click', () => {
+        note('disposition=' + name);
+        // opts.dispositionSticks === false models a control that takes the
+        // click without recording it, which is what a misclick looks like.
+        if (opts.dispositionSticks !== false) toggle.textContent = name;
+        ul.remove();
+      });
+      ul.appendChild(li);
+    }
+    document.body.appendChild(ul);
+  });
+
+  // The split button: "Log & Complete" plus a caret whose menu holds "Log Only".
+  const logBtn = document.createElement('button');
+  logBtn.textContent = 'Log & Complete';
+  logBtn.addEventListener('click', () => note('Log & Complete'));
+  logger.appendChild(logBtn);
+
+  if (!opts.noMenuToggle) {
+    const caret = document.createElement('button');
+    caret.setAttribute('data-testid', 'menuToggle');
+    caret.setAttribute('aria-label', 'Open Log only or complete only menu');
+    caret.textContent = '▾';
+    caret.addEventListener('click', () => {
+      if (document.getElementById('log-menu')) return;
+      const ul = document.createElement('ul');
+      ul.id = 'log-menu';
+      for (const name of ['Log Only', 'Complete Only']) {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'menuitem');
+        li.textContent = name;
+        li.addEventListener('click', () => { note(name); ul.remove(); });
+        ul.appendChild(li);
+      }
+      document.body.appendChild(ul);
+      note('menu opened');
+    });
+    logger.appendChild(caret);
+  }
+
+  // The cadence control, outside the logger, named only by aria-label.
+  if (!opts.noRemove) {
+    const remove = document.createElement('button');
+    // How Salesloft really names it: not an aria-label on the button, but the
+    // <title> of the icon inside it. `nameFrom` switches between the ways an
+    // icon button can carry an accessible name, because reading only the
+    // attribute is what made this control unfindable in the field.
+    const NAME = opts.removeLabel || 'Remove person from cadence';
+    const nameFrom = opts.nameFrom || 'svg-title';
+    if (nameFrom === 'aria-label') remove.setAttribute('aria-label', NAME);
+    if (nameFrom === 'title') remove.setAttribute('title', NAME);
+    if (nameFrom === 'labelledby') {
+      const lbl = document.createElement('span');
+      lbl.id = 'remove-label';
+      lbl.textContent = NAME;
+      lbl.style.cssText = 'position:absolute;left:-9999px';
+      app.appendChild(lbl);
+      remove.setAttribute('aria-labelledby', 'remove-label');
+    }
+    remove.innerHTML = nameFrom === 'svg-title'
+      ? `<svg width="10" height="10" role="graphics-symbol"><title>${NAME}</title></svg>`
+      : '<svg width="10" height="10"></svg>';
+    remove.style.cssText = 'width:16px;height:16px';
+    remove.addEventListener('click', () => {
+      note('remove from cadence');
+      // Salesloft throws toasts for unrelated things. This one is about someone
+      // else entirely and carries a dialog role, and it lands in the same
+      // window the confirmation would.
+      if (opts.toast) {
+        const toast = document.createElement('div');
+        toast.setAttribute('role', 'alertdialog');
+        toast.style.cssText = 'position:fixed;top:10px;left:40%;background:#224;z-index:20';
+        toast.innerHTML = '<span>Task deleted for Joshua Tan.</span>' +
+          '<button>View</button><button>\u2715</button>';
+        document.body.appendChild(toast);
+        note('toast opened');
+      }
+      if (!opts.confirm) return;
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      dialog.style.cssText = 'position:fixed;inset:30% 30%;background:#333;z-index:10';
+      const words = document.createElement('p');
+      words.textContent = opts.confirmText || 'Remove this person from the cadence?';
+      dialog.appendChild(words);
+      for (const name of (opts.confirmButtons || ['Cancel', 'Remove'])) {
+        const b = document.createElement('button');
+        b.textContent = name;
+        b.addEventListener('click', () => { note('dialog:' + name); dialog.remove(); });
+        dialog.appendChild(b);
+      }
+      document.body.appendChild(dialog);
+      note('dialog opened');
+    });
+    app.appendChild(remove);
+  }
+};
+
+// ---- chrome stub ----
+window.__slSettings = window.__slSettings || {};
+window.chrome = {
+  runtime: {
+    id: 'harness',
+    sendMessage: (m, cb) => { if (m && m.type === 'command-keys' && cb) cb({ keys: window.__slCommandKeys || {} }); return Promise.resolve(); },
+    onMessage: { addListener: (fn) => { window.__slOnMessage = fn; } },
+    lastError: null,
+  },
+  storage: {
+    sync: { get: (d, cb) => setTimeout(() => cb(Object.assign({}, d, window.__slSettings)), 0), set: () => {} },
+    local: { get: (d, cb) => setTimeout(() => cb(d), 0), set: () => {} },
+    onChanged: { addListener: (fn) => { window.__slOnStorage = fn; } },
+  },
+};
+window.__buildSalesloft();
+</script>
+<script src="../../extension/defaults.js"></script>
+<script src="../../extension/spring.js"></script>
+<script src="../../extension/call-detect.js"></script>
+<script src="../../extension/content.js"></script>
+</body></html>

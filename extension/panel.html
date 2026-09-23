@@ -79,14 +79,24 @@
     .foot { display: flex; flex-direction: column; gap: 7px; align-items: flex-start; max-width: 100%; min-width: 0; }
     .label { font-size: 15px; font-weight: 600; letter-spacing: -.012em; line-height: 1.1; }
     /* One chip carrying whatever keys are actually bound; panel.js fills it. */
+    /* An explicit line-height and a minimum size, because a chip is a shape
+       with a character centred in it: padding alone left a single glyph in a
+       14px sliver, and letter-spacing applies after the last character too, so
+       a one-character cap sat left of its own middle. */
     .sub {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      min-height: 16px;
       background: rgba(0, 0, 0, .24);
       border: 1px solid rgba(255, 255, 255, .16);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
       border-radius: 4px;
-      padding: 1px 5px;
+      padding: 2px 4px 2px 5px;
       font-size: 10px;
       font-weight: 600;
+      line-height: 1;
       letter-spacing: .04em;
       max-width: 100%;
       overflow: hidden;
@@ -100,6 +110,52 @@
     #call {
       background: linear-gradient(180deg, #2aa55c 0%, #13623a 100%);
       box-shadow: var(--btn-shadow), 0 10px 20px rgba(30, 140, 80, .16);
+    }
+
+    /* -- the third action --------------------------------------------------- */
+    /* A raised face rather than a third gradient, at a quarter of the pair's
+       height: it is reached for once in a hundred dials, and a control that
+       looked like the other two would be read as often as them. Hidden until
+       the rep turns it on. */
+    #not-in-service {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      height: 26px;
+      flex-shrink: 0;
+      padding: 0 8px;
+      border-radius: 5px;
+      background: var(--raised);
+      border: 1px solid var(--raised-border);
+      box-shadow: var(--raised-top);
+      color: var(--soft);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+    }
+    #not-in-service.on { display: flex; }
+    #not-in-service .nis-icon { display: flex; flex: 0 0 auto; align-items: center; }
+    #not-in-service .nis-label {
+      flex: 1 1 auto;
+      min-width: 0;
+      text-align: start;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #not-in-service:not(.armed):hover {
+      background: rgba(255, 255, 255, .09);
+      border-color: rgba(255, 255, 255, .14);
+      color: var(--text);
+    }
+    /* Armed: one press in, waiting for the second. Red because this is the one
+       control here whose result cannot be undone from this window. */
+    #not-in-service.armed {
+      background: #3a1d1a;
+      border-color: #c0392b;
+      color: var(--err);
     }
 
     /* -- status ----------------------------------------------------------- */
@@ -188,9 +244,11 @@
       font-size: 12px;
     }
 
+    /* 24 is the floor a pointer target may have (WCAG 2.2 target size,
+       minimum), and these are aimed at mid-call. */
     .icon-btn {
-      width: 20px;
-      height: 20px;
+      width: 24px;
+      height: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -297,6 +355,14 @@
     </button>
   </div>
 
+  <!-- Below the pair rather than beside it, so the two buttons the rep aims
+       at all day keep their size whether or not this one is on. -->
+  <button id="not-in-service" data-action="not-in-service" type="button" aria-pressed="false">
+    <span class="nis-icon"></span>
+    <span class="nis-label">Not in Service</span>
+    <span class="sub"></span>
+  </button>
+
   <div class="status-row">
     <span class="status-dot"></span>
     <div id="status">Ready</div>
@@ -307,10 +373,14 @@
       <span class="dot offline" id="indicator"></span>
       <span id="connection">OFFLINE</span>
       <span id="timer">00:00</span>
-      <button class="icon-btn" id="pause" title="Pause transcription" aria-pressed="false">⏸</button>
-      <button class="icon-btn" id="copy" title="Copy transcript">⧉</button>
-      <button class="icon-btn" id="save" title="Save transcript as text">↓</button>
-      <button class="icon-btn" id="clear" title="Clear transcript">✕</button>
+      <!-- Drawn, not typed: a text glyph is centred by its line box rather
+           than by its ink, and most of these are not in the UI font at all, so
+           they arrived from whatever fallback the machine had at whatever
+           weight it drew. panel.js fills each one from the shared set. -->
+      <button class="icon-btn" id="pause" title="Pause transcription" aria-pressed="false"></button>
+      <button class="icon-btn" id="copy" title="Copy transcript"></button>
+      <button class="icon-btn" id="save" title="Save transcript as text"></button>
+      <button class="icon-btn" id="clear" title="Clear transcript"></button>
     </div>
     <div id="transcript" tabindex="-1">
       <div id="empty">Waiting for the call to start…</div>

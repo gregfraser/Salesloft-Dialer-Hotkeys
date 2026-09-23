@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two things that ship together:
 
-1. **A Chrome extension** (Manifest V3, plain JavaScript — no build system, no bundler, no `package.json`) that automates Salesloft cadence dialing. Two actions, `kill-and-log` (end call → set disposition → click "Log & Complete") and `start-call`, triggerable by global hotkeys, an on-page overlay, or a floating panel window.
+1. **A Chrome extension** (Manifest V3, plain JavaScript — no build system, no bundler, no `package.json`) that automates Salesloft cadence dialing. Three actions — `kill-and-log` (end call → set disposition → click "Log & Complete"), `start-call`, and the optional `not-in-service` (set its own disposition → "Log Only" → remove the person from the cadence) — triggerable by global hotkeys, an on-page overlay, or a floating panel window.
 2. **A local Python transcription service** (FastAPI + Silero VAD + faster-whisper) that turns live call audio into on-screen text. Runs on loopback only; no audio is written to disk or leaves the machine.
 
 Installed via "Load unpacked" from `extension/`; not in the Chrome Web Store.
@@ -29,7 +29,7 @@ python -m pytest tests/                        # 93 tests: VAD, queue, protocol,
 python -m pytest tests/test_vad_endpointing.py # a single file
 python -m pytest tests/ -k merges -q            # a single test by name
 node --test tests/test_salesloft_detection.js  # DOM detection (21)
-node --test tests/test_hotkeys.js              # key bindings: record, match, label (20)
+node --test tests/test_hotkeys.js              # key bindings: record, match, label (23)
 node --test tests/test_pcm_worklet.js          # audio downsampling (14)
 node --test tests/test_transcript_format.js    # shared transcript formatting (10)
 node --test tests/test_contact_page.js         # which routes are a contact (8)
@@ -37,6 +37,28 @@ node --test tests/test_contact_alert.js        # tag matching (7)
 ```
 
 `node --test tests/` does **not** work — the directory is named `tests` and the files use underscores, so neither matches Node's default discovery patterns. Name the file explicitly.
+
+The DOM automation is the part most likely to break and the part `node --test`
+cannot reach, so it has a browser suite of its own in `tests/browser/`
+(Playwright, installed there on demand — the extension keeps no `package.json`,
+and git ignores whatever npm writes in that directory):
+
+```bash
+cd tests/browser && npm install playwright && npx playwright install chromium
+node behaviour.mjs   # the Not in Service flow, the pane, the not-armed state (56)
+node regress.mjs     # the two older flows, the plate's geometry, the compact bar (26)
+```
+
+`mock.html` is a Salesloft-shaped page built from structure and accessible
+names only, never a generated class — the same rule `content.js` follows. Make
+it as awkward as the real page — every option on `__buildSalesloft()` exists
+because it caught a bug that the unit tests and a screenshot both missed: the
+`confirm` dialog is `position:fixed`, `loggerIsDialog` gives the popout
+`role="dialog"`, `decoys` fills the feed with pills whose entire text is the
+disposition being looked for, `nameFrom` moves the cadence control's accessible
+name between four places, `listPage` drops the contact marker, and
+`downshiftMenu` keeps the disposition menu in the DOM while it is closed. See
+`tests/browser/README.md`.
 
 The Python tests need only `numpy pytest pyyaml fastapi httpx`. faster-whisper, torch and Silero are imported lazily inside methods precisely so the whole suite runs without them; keep it that way when adding code. `tests/conftest.py` puts `server/` on the path because the service modules import each other by bare name (they run package-less under uvicorn).
 
@@ -77,6 +99,11 @@ gone while `python -m pip` still works.
 
 ## Verifying extension changes
 
+`tests/browser/` drives the flows against a mock page and catches most
+selector and state bugs; it is not a substitute for the pass below, which is
+the only thing that exercises real Salesloft, real tab capture and the real
+audio path.
+
 Manual, against the live Salesloft app:
 
 1. `chrome://extensions` → Developer mode → **Load unpacked** → select `extension/`.
@@ -90,8 +117,8 @@ Manual, against the live Salesloft app:
 Four execution contexts in Chrome plus one Python process. Understanding any feature means tracing it across several. `docs/architecture.md` has the full diagram and rationale.
 
 - **`background.js`** (service worker) — the relay and the owner of transcription state (`IDLE → STARTING → TRANSCRIBING → FINALIZING`, plus first-class `DEGRADED`). Finds the most-recently-accessed Salesloft tab, forwards dialer actions, and on failure injects the content scripts via `chrome.scripting` and retries once. Owns the panel window (id in `chrome.storage.session`, so it survives worker sleep), the offscreen document lifecycle, and capture arming.
-- **`content.js`** — runs only on `https://app.salesloft.com/*`, and renders its overlay only on a contact's page (`syncOverlay()`); performs the DOM automation, renders the optional overlay (buttons, contact-alert line, status, and — when transcription is on — the live transcript pane), handles the in-page bindings (← and → by default). Guards double-injection with `window.__slHotkeysLoaded`.
-- **Content-script order in `manifest.json` is load-bearing**: `defaults.js`, `spring.js`, `call-detect.js`, `content.js`, `alerts.js`. All five share one isolated world and talk through globals, so `content.js` needs the defaults, the springs and the detector already defined, and `alerts.js` runs last because it calls the `window.__slOnContactAlert` hook that `content.js` registers. `background.js` recovers a failed send by injecting a copy of that list via `chrome.scripting.executeScript` (`files:` in `sendToSalesloft`), and the two lists have to be kept identical by hand. At the time of writing the fallback list lacks `spring.js`, so `content.js` throws on `window.slSpring` when it is injected that way into a tab that predates the install with the overlay enabled.
+- **`content.js`** — runs only on `https://app.salesloft.com/*`, and renders its overlay only on a contact's page (`syncOverlay()`); performs the DOM automation, renders the optional overlay (buttons, contact-alert line, status, and — when transcription is on — the live transcript pane), handles the in-page bindings (←, → and ↑ by default). Guards double-injection with `window.__slHotkeysLoaded`.
+- **Content-script order in `manifest.json` is load-bearing**: `defaults.js`, `spring.js`, `call-detect.js`, `content.js`, `alerts.js`. All five share one isolated world and talk through globals, so `content.js` needs the defaults, the springs and the detector already defined, and `alerts.js` runs last because it calls the `window.__slOnContactAlert` hook that `content.js` registers. `background.js` recovers a failed send by injecting a copy of that list via `chrome.scripting.executeScript` (`files:` in `sendToSalesloft`), and the two lists have to be kept identical by hand — the fallback used to be missing `spring.js`, which made `content.js` throw on `window.slSpring` whenever it was injected that way.
 - **Orphaned content scripts are a normal state.** Reloading or updating the extension leaves the old content scripts running in the page with `chrome.runtime` gone — accessing it throws. Every `chrome.*` send from a content script goes through a guard (`safeSend()` in `content.js`, try/catch in `alerts.js`) so the DOM flows still complete from a stale script, and `buildOverlay()` always **replaces** an existing overlay rather than keeping it, because a leftover one is wired to the dead context — `syncOverlay()` keeps that true by treating an overlay it did not build as missing. Preserve both patterns in new content-script code.
 - **`call-detect.js`** — call-state detection, **observe only**. Takes its DOM access as injected functions (`elements`, `isVisible`) so it is testable without a DOM.
 - **`alerts.js`** — reads the Disposition / Sentiment tags already on the contact's page, **read only**. It renders nothing of its own: the colour-coded alert shows in the floating panel (via a `contact-alert` message) and as a subtle line inside the on-page overlay (via the `window.__slOnContactAlert` hook `content.js` registers in their shared isolated world). `content.js` also reads `window.__slContactAlert` for its status line.
@@ -102,7 +129,7 @@ Four execution contexts in Chrome plus one Python process. Understanding any fea
 
 ### Settings
 
-`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `disposition`, `hotkeys`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `outputDeviceId`, `serverUrl`, `healthUrl`). With `transcription` on, auto-start is unconditional — it is a behaviour, not a setting. `transcription` also decides whether the on-page overlay carries the transcript pane, so toggling it rebuilds the overlay.
+`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `compactBar`, `disposition`, `notInService`, `notInServiceDisposition`, `hotkeys`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `outputDeviceId`, `serverUrl`, `healthUrl`). With `transcription` on, auto-start is unconditional — it is a behaviour, not a setting. `transcription` also decides whether the on-page overlay carries the transcript pane, so toggling it rebuilds the overlay.
 
 **No transcript is ever downloaded automatically.** A cadence is dozens of dials and almost none of them are worth a file, so a save happens only from a click on a ↓ button. Both UIs enforce this; a "save it for them" convenience is the thing not to add back. Chrome independently forbids it on the page side anyway — a web page gets one uninvited download before Chrome starts asking the user's permission for the rest, so an automatic per-call save from `content.js` would put a permission bubble on the Salesloft page partway through a call block.
 
@@ -119,10 +146,15 @@ the only way to fire an action from another tab, and its picker takes a Ctrl or
 Alt combination and nothing else — no number pad, which is where a rep working a
 cadence keeps a hand — and it silently leaves a command unassigned when the
 suggested key is already taken by something else installed. So the extension
-also keeps its own bindings (`hotkeys` in storage, `kill-and-log` and
-`start-call`) and listens for them itself, in `content.js` and `panel.js` — the
-only two places a key event reaches this extension at all. Both routes end at
-the same two functions.
+also keeps its own bindings (`hotkeys` in storage, `kill-and-log`,
+`start-call` and `not-in-service`) and listens for them itself, in `content.js`
+and `panel.js` — the only two places a key event reaches this extension at all.
+Both routes end at the same functions. The three shipped bindings are three
+arrows under one hand — left and right for the pair, up for `not-in-service`.
+A bound arrow stops scrolling the Salesloft page while the overlay is loaded,
+since the in-page handler `preventDefault`s whatever it matches; that was
+already true of left and right. Empty stays a normal value, and a rep who wants
+the key back clears it in the popup.
 
 **A binding is `e.code`, not `e.key`**, canonicalised by `slHotkeyFromEvent()`
 in `defaults.js` as `Ctrl+Alt+Shift+Meta+<code>` with the modifiers always in
@@ -180,7 +212,10 @@ Content scripts receive none of those broadcasts, so the on-page transcript is f
 `content.js` drives Salesloft's React UI with no API access:
 
 - Buttons found by exact (case-insensitive, whitespace-collapsed) visible text — "End Call", "Log & Complete", "Call" — scoped to `[data-testid="popout-logger-container"]` when logging.
-- The disposition dropdown is a Downshift combobox, located via `[id$="toggle-button"]` / `[aria-haspopup="listbox"]` near the text "Disposition"; the option is matched against the `disposition` setting exactly.
+- `not-in-service` takes a different branch of the same UI, and its steps come from a recording of the flow done by hand rather than from guesswork: the split button's caret (`[data-testid="menuToggle"]`, accessible name "Open Log only or complete only menu") → the menu's "Log Only" → the cadence's own control, matched on the accessible name "Remove person from cadence" because it is an icon button with no text. A confirmation dialog may or may not follow; its *absence* is a normal outcome (hence `CONFIG.confirmTimeout`, 1.5s, not the 8s step timeout), but a dialog that appears with no recognised button throws rather than being left open. Two rules make that work and both were bugs first: the dialog is found with `isShown()` rather than `visible()`, because **`offsetParent` is null for a `position:fixed` element** and every modal is one — `visible()` stays correct for the controls *inside* a container and wrong for the container itself; and only a dialog that was **not already open** when the removal was clicked counts, because Salesloft's own logger popout carries `role="dialog"` and a document-wide lookup matched the popout the flow had just been driving.
+- The disposition dropdown is a Downshift combobox, located via `[id$="toggle-button"]` / `[aria-haspopup="listbox"]` near the text "Disposition"; the option is matched against the `disposition` setting exactly — **inside the list that toggle just opened** (`aria-controls` / `aria-owns` on the toggle or the input beside it, the `-menu` twin of a `-toggle-button` / `-input` id, or whichever list was not **on screen** a moment ago), never across the document. "On screen", not "in the DOM": Downshift keeps its menu rendered while closed, so recording every list that existed before the click ruled out the one the toggle opened, and the flow stopped on `could not find "No Answer"` with the option in plain view. The candidates are re-resolved on every poll, and a miss puts the toggle's attributes and each candidate list's items in the console (`dumpDisposition()`). The option search used to be `[role="option"], [role="listbox"] li, ul li` page-wide, and `ul li` matches every list item Salesloft renders: on a contact logged "Not in Service" a dozen times, the activity feed and the cadence sidebar are full of elements whose entire text is exactly the disposition being looked for, so the click landed on one of those and the field stayed empty. The selection is then **read back** before anything logs, because a click that misses is otherwise silent and the next step logs the call without a disposition.
+- **An icon button is named by more than `aria-label`.** `accessibleName()` reads `aria-label`, then `aria-labelledby`, then the `title` attribute, then the `<title>` inside its own artwork, then its text — and the cadence control needs that last-but-one: Salesloft names "Remove person from cadence" from the `<title>` of its SVG, which is what a recorded `::-p-aria(…) >>>> ::-p-aria([role="graphics-symbol"])` was saying. Reading the attribute alone found nothing, so the flow logged the call and then timed out. Where text content is the only name left, the **shortest** match wins, so a panel that merely mentions the words loses to the button itself.
+- **A timeout names what it was waiting for.** `waitFor(fn, timeout, interval, what)` — "Stopped: could not find the Remove from cadence control" is a bug report; "Timed out waiting for element" is not. When the cadence control is the one that is missing, `dumpNames()` also puts every named control on the page into the console, because by then the call is logged and the rep has to finish by hand.
 - `realClick()` dispatches the full pointerdown → mousedown → pointerup → mouseup → click sequence because React controls ignore a bare `.click()`.
 - `waitFor()` polls every 100 ms with an 8 s timeout.
 
@@ -200,7 +235,10 @@ When Salesloft ships UI changes, these are what break.
 
 **Dialer**
 
-- `killAndLog` sets the disposition **before** clicking "Log & Complete". Any failed step throws, surfaces "Stopped: … Finish manually.", and leaves the call unlogged — never log with a wrong or missing disposition.
+- `killAndLog` sets the disposition **before** clicking "Log & Complete". Any failed step throws, surfaces "Stopped: … Finish manually.", and leaves the call unlogged — never log with a wrong or missing disposition. `runNotInService` keeps the same rule and adds one: the cadence removal goes **last**, because a person removed from a cadence with no call logged against them is the worse half-state of the two.
+- **The third control arms before it fires, and that is its confirmation.** `not-in-service` is the only thing in this extension that takes a person out of a cadence, and undoing it means finding them and adding them back by hand. A modal is out (nothing here steals focus mid-call), so the control itself asks: one press turns it red and changes its label to "Remove from cadence?", a second within 3s commits, and the window lapses on its own. Both surfaces implement it, and both disarm when the overlay is replaced or the setting goes off — a press half-made against a control that is no longer there must not survive. **Whoever asked the question owns the answer**: the panel confirms on its own surface and sends `confirmed: true`, which the content script runs straight through, because arming a second time there made the panel's confirming press do nothing and put the real commit two presses later inside a 3s window. And arming never happens where it cannot be seen. Two surfaces have no strip to turn red — the page controls off entirely, and the compact bar, which deliberately does not carry this control — so `notInService()` refuses on both rather than letting a second keypress remove someone with nothing having asked. The refusal names the full plate and the panel, not "the on-page buttons", because in compact mode the rep already has those on.
+- **It is off by default and it shares the base row, never the pair's row.** Putting a third button beside the pair would take width from the two buttons a rep aims at all day. It sits on the row below them instead, next to the status — one 26px line spanning the whole plate. That row is what fixed the balance: the strip used to be 214 wide under a plate that is 278 or 552, so the corner beneath the transcript pane was bare. Its disposition is its own setting for the same reason `disposition` is one: it has to match Salesloft's dropdown text exactly. The strip has **two widths** and which one is in use follows the pane beside it — the full column at 552, its mark and key alone at 278 or 234, where a name will not fit next to a status line that has to hold "Stopped: …".
+- **`compactBar` is how the page controls are drawn, not whether.** `pageOverlay` decides if anything is on the page; `compactBar` decides whether that is the full plate or a 42px bar carrying the same status and the same two actions at 26px. The full plate is the default and stays it. The bar has no Not in Service strip — a control that takes someone out of a cadence does not belong on the surface a rep chose because they wanted the plate out of the way — and no transcript pane. It **stands down for the duration of a call**: `reportCallState()` rebuilds on the crossing into and out of `IN_CALL`, because mid-call is exactly when the large targets earn their size. That rebuild is the one place this plate changes size on its own, and it is the trade a rep accepts by choosing the mode rather than one forced on everyone.
 - A `busy` flag serializes flows; hotkeys and clicks are ignored while one runs.
 - In-page key bindings are suppressed while typing (`isTyping()`) — which is what makes a bare letter a usable binding at all — and ignore auto-repeat, so a held key cannot queue flows behind `busy`.
 - **The keys on the buttons are read back, never assumed.** The overlay and the panel print the rep's binding and whatever `chrome.commands.getAll()` reports, and print nothing for an action that has neither. Hard-coding `Ctrl⇧9` there is how the buttons came to claim a shortcut Chrome had left unassigned.
@@ -209,12 +247,14 @@ When Salesloft ships UI changes, these are what break.
   `chrome.storage.local` — local, never `sync`, because it is a position on this monitor — rubber-banded
   while dragging, carried to rest by a spring holding the release velocity, and re-clamped on resize so a
   smaller window can never strand it off screen. Everything the rep aims at is still a fixed size: the
-  button column 214px, the transcript pane 308px, both exactly `PANEL_HEIGHT`, so the two finish on the
-  same line and transcript lines scroll rather than push anything around. The status is a reserved
-  one-line strip **below** that row — a sentence reads better across the plate than down 214px — and it
-  ellipsises with the whole of a long "Stopped: …" in the tooltip, which is what stops it resizing
-  anything (`width:0;min-width:100%` keeps a long line from deciding the plate's width). With
-  transcription off the timer moves into the free end of that strip.
+  button column 214px, the transcript pane 308px, both exactly `PANEL_HEIGHT` (104), so the two finish on
+  the same line and transcript lines scroll rather than push anything around. The status shares the
+  **base row** with the Not in Service strip — a sentence reads better across the plate than down 214px —
+  and it ellipsises with the whole of a long "Stopped: …" in the tooltip, which is what stops it resizing
+  anything (`width:0;min-width:100%` on that row keeps a long line from deciding the plate's width). The
+  call timer and the line count live on that row too, in every state: they used to be drawn in the
+  transcript pane as well, and that duplication is the whole reason the collapsed pane needed 96px to say
+  what the line below it was already saying.
 - **The status strip is the one place two paths write, so the order between them is fixed.** The click
   path owns it — a flow's "Ending call…" and its "Stopped: … Finish manually." are the rep's only
   account of a call that may now be half-logged. The detection path adds `setCallLive()`: the dot goes
@@ -249,16 +289,43 @@ When Salesloft ships UI changes, these are what break.
   a **raised** face sits on it (`rgba(255,255,255,.045)` + hairline border + inset top highlight), and an
   **inset** well is cut into it (`#0f1113` + inset shadow) for the transcript and every form field.
   Nothing in this UI is flat.
+- **Icons are drawn, not typed, and a pointer target is never under 24px.** The small controls were text
+  glyphs (`«`, `»`, `⏸`, `↓`, `⧉`, `✕`, `⊘`) and that is wrong three times over: flex centring centres the
+  line box rather than the ink, so the mark sits low in its own button; most of these are not in the UI
+  font and arrive from whatever fallback the machine has, at whatever weight it draws; and there is no way
+  to match stroke weights across them. `SL_ICONS` in `defaults.js` is one inline-SVG set shared by the
+  overlay and the panel. The same rule makes a keycap an `inline-flex` box with an explicit `line-height`
+  and a minimum size instead of bare padding — a single character in `padding:1px 5px` sat in a 14px
+  sliver, and `letter-spacing` applies after the last character too, so a one-character cap was pushed
+  left of its own middle.
 - **Minimising hides the reading, not the transcript.** The old rail beside the pane is gone — its
-  controls now live in the pane's own header — so minimising collapses the pane onto that header rather
-  than away entirely, and the light, the timer, the toggle, pause and save all stay reachable while no
-  captured line is lost; capture itself is untouched. The design prototype draws the pane open only and
+  controls now live in the pane's own header — so minimising collapses the pane onto a rail rather than
+  away entirely, and the light, the toggle, pause and save all stay reachable while no captured line is
+  lost; capture itself is untouched. Collapsed it is **34px**: one column of 24px controls with the light
+  above them and no words at all, at the row's full `PANEL_HEIGHT`. It could shrink that far only because
+  the timer and the line count moved to the base row — drawn in both places, they were what kept an
+  earlier 96px version that wide, saying on the plate what the line below it already said. It must never
+  go to `height:auto`; that left a header hanging at the top of the row with bare plate under it, the one
+  place on this plate where a control did not end where its neighbour did. The design prototype draws the
+  pane open only and
   collapses it to zero width, which would take the restore control with it; collapsing to the header is
   the smallest thing that keeps its shape without putting a control out of reach. The flag lives in
   `txView` rather than storage, so it survives an overlay rebuild (a settings toggle, a stale copy being
   replaced) but not a page reload.
+- **"Not armed" is a state, not an error, and it is drawn like one.** Capture arming is a Chrome
+  constraint, so the pre-state before a rep has armed once is normal and one keypress ends it. It reports
+  as its own `notarmed` state and says which key **read back from `chrome.commands`**, never the manifest's
+  `suggested_key` — hard-coding `Ctrl+Shift+8` there is the same defect as hard-coding `Ctrl⇧9` on a
+  button, and `armingKey()` in `background.js` is what keeps it honest. How loudly it says so is the rest
+  of the invariant, and the bar is low: it is the pane's own **placeholder**, in the same corner, size and
+  italic grey as "Waiting for the call to start…", so it occupies space that had nothing in it. It never
+  covers captured lines (with entries on screen the header word carries it alone), it stays out of the
+  status strip — whose error colour belongs to a call that may now be half-logged — the explanation of
+  *why* Chrome works this way lives in the pane's tooltip rather than on screen, and the only colour
+  anywhere is the header dot. A banner across the pane, an amber word, or the status strip are each a
+  louder answer than a normal state deserves.
 - **Nothing renders over the Salesloft page.** The contact alert appears only in the floating panel and as the tinted line inside the overlay (`window.__slOnContactAlert`); do not bring back a floating toast.
-- **The overlay belongs to a contact, not to Salesloft.** It is drawn only where one person is on screen — `slIsContactUrl()` in `defaults.js` matches the route (`/app/people/{id}` and friends, never the People list), and `content.js` falls back to the DOM (`[data-testid="popout-logger-container"]`, `person-detail*`) so the logger popout keeps the buttons wherever the rep dialled from. Salesloft is a single-page app, so `syncOverlay()` re-decides on every re-render rather than once at injection, and it never removes the overlay while `busy` — a flow mid-way through logging a call keeps its status line.
+- **The overlay belongs to a contact, not to Salesloft, and the logger popout is a weaker signal than it looks.** It is drawn only where one person is on screen — `slIsContactUrl()` in `defaults.js` matches the route (`/app/people/{id}` and friends, never the People list), and `content.js` falls back to `[data-testid*="person-detail"]`. The popout (`[data-testid="popout-logger-container"]`) used to count on its own, and it should not: it opens over whatever the rep was on and *stays* open, so on a cadence's People list the plate appeared beside 170 rows with nothing dialled. But it is also the only thing on screen once a rep dials from that list, and taking the buttons away mid-call is worse than showing them early — so the popout counts only while `lastCallState === 'IN_CALL'` or a flow is `busy`. Browsing a cadence gets nothing; calling in one gets the buttons wherever it was started from. Salesloft is a single-page app, so `syncOverlay()` re-decides on every re-render rather than once at injection, and it never removes the overlay while `busy` — a flow mid-way through logging a call keeps its status line.
 
 **Transcription**
 
