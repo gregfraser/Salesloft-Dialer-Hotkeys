@@ -8,8 +8,6 @@ Make cadence calling faster. Instead of clicking End Call, picking a disposition
 
 It also checks each contact before you dial. If Salesloft already has them tagged **Meeting Scheduled**, **Interested**, **Do Not Contact** or another tag you care about, a coloured alert says so above the buttons.
 
-Current version: **1.5**
-
 ---
 
 ## Install
