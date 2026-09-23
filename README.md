@@ -1,315 +1,208 @@
 # Salesloft Dialer Hotkeys
 
-Make cadence calling faster. Instead of clicking End Call, picking a disposition, and hitting Log & Complete for every no-answer, you press **one key** (or click one button) and it all happens for you.
+Make cadence calling faster. Instead of clicking End Call, picking a disposition and clicking Log & Complete after every no-answer, you press **one key** (or click one button) and it all happens for you.
 
 <p align="center">
-  <img src="extension/images/controls.png" alt="The dialer plate: a red No Answer button beside a green Call button, each showing its bound key, with a status line reading Connected and a call timer at 00:35" width="440">
+  <img src="extension/images/controls.png" alt="The dialer plate: a red No Answer button with the left arrow key beside a green Call button with the right arrow key, above a status line reading Connected and a call timer" width="268">
 </p>
 
-And before you dial, it checks the contact's page for you — if Salesloft already
-has them tagged **Meeting Scheduled**, **Interested**, **No Interest**, **Do
-Not Contact** or another tag on your watch list, a colour-coded alert says so,
-right above the buttons.
+It also checks each contact before you dial. If Salesloft already has them tagged **Meeting Scheduled**, **Interested**, **Do Not Contact** or another tag you care about, a coloured alert says so above the buttons.
+
+Current version: **1.5**
 
 ---
 
 ## Quick start
 
-Three things, in this order. Each one links to the full steps.
-
 | | Do this | Takes |
 |---|---|---|
-| **1** | [Install the extension](#installing) — download the folder, load it in Chrome | ~2 min, once |
-| **2** | [Set your keys](#choosing-your-keys) — or keep <kbd>←</kbd> and <kbd>→</kbd> | ~1 min, once |
-| **3** | [Dial](#using-it) — <kbd>→</kbd> to call, <kbd>←</kbd> to kill and log | every call |
-
-Live transcription is optional and separate — it needs a small program running
-on your own machine. [Set it up later](#live-transcription-optional), once
-dialing works.
+| **1** | [Install the extension](#install) | 2 minutes, once |
+| **2** | [Make your calls](#make-calls): <kbd>→</kbd> to call, <kbd>←</kbd> to log No Answer | every call |
+| **3** | Optional: [change your keys](#change-your-keys), [turn on Not in Service](#not-in-service-optional), [add live transcription](#live-transcription-optional) | whenever you like |
 
 ---
 
-## Installing
+## Install
 
-You only have to do this once. The extension isn't in the Chrome Web Store, so
-Chrome needs you to load it manually — that's what these steps do.
+You only do this once. The extension isn't in the Chrome Web Store, so you load it into Chrome yourself.
 
-### Step 1 — Download the folder
+1. **Download it.** Click the green **Code** button at the top of this page, then **Download ZIP**.
+2. **Unzip it.** On Windows, right-click the file and choose **Extract All**. On a Mac, double-click it.
+3. **Put the folder somewhere permanent**, like Documents. Chrome runs the extension from this folder, so if it gets moved or deleted the extension stops working.
+4. **Open Chrome's extensions page.** Type `chrome://extensions` in the address bar and press <kbd>Enter</kbd>.
+5. **Turn on Developer mode** with the switch in the top-right corner.
+6. **Click Load unpacked**, open the folder you unzipped, and select the folder inside it called **`extension`**.
+7. **Pin it.** Click the puzzle piece 🧩 next to the address bar, then the pin 📌 next to **Salesloft Dialer Hotkeys**. Its icon opens the settings.
+8. **Refresh Salesloft** if it was already open, then open any person's page.
 
-1. Click the green **Code** button at the top of this page.
-2. Click **Download ZIP**.
-3. Open the downloaded file — Windows: right-click → **Extract All**; Mac: double-click.
-4. You now have a folder called `Salesloft-Dialer-Hotkeys-main`. Move it somewhere permanent, like your Documents folder.
+✅ The red and green buttons appear in the bottom-left corner. You're done.
 
-> [!WARNING]
-> **Don't delete or move this folder later.** Chrome runs the extension directly
-> from it — if the folder goes in the trash, the extension stops working.
+The buttons only appear where there's someone to dial: a person's page, or wherever you are while a call is up. You won't see them on your dashboard, a cadence, or the People list.
 
-### Step 2 — Open Chrome's extensions page
+### Updating to a new version
 
-1. Click Chrome's address bar.
-2. Type `chrome://extensions` and press <kbd>Enter</kbd>.
+1. Download the ZIP again and unzip it.
+2. Replace the contents of your old folder with the new one (keep the folder in the same place).
+3. On `chrome://extensions`, click the reload arrow ↻ on the **Salesloft Dialer Hotkeys** card.
+4. Refresh your Salesloft tab.
 
-### Step 3 — Turn on Developer mode
-
-1. Look in the **top-right corner** of that page.
-2. Click the **Developer mode** toggle so it turns on.
-
-### Step 4 — Load the extension
-
-1. Three new buttons appear near the top-left. Click **Load unpacked**.
-2. Open the folder from Step 1.
-3. Go **into** it and select the folder named **`extension`**.
-4. Click **Select Folder**.
-
-✅ A card reading **Salesloft Dialer Hotkeys** should now be on the page.
-
-### Step 5 — Pin it to your toolbar
-
-1. Click the puzzle-piece icon 🧩 to the right of Chrome's address bar.
-2. Find **Salesloft Dialer Hotkeys** in the list.
-3. Click the pin 📌 next to it.
-
-✅ Its icon is now always visible. That icon is how you open settings.
-
-### Step 6 — Refresh Salesloft
-
-1. If you already had Salesloft open, refresh that tab once.
-2. Open any person's page.
-
-✅ The red and green buttons (pictured above) appear in the bottom-left corner.
-You're done! 🎉
-
-> The buttons only show up where there's someone to dial — a contact's page, or
-> any page with the call window open. You won't see them on your dashboard, a
-> cadence, or the People list.
+The card on `chrome://extensions` shows which version you're running.
 
 ---
 
-## Using it
+## Make calls
 
-Open Salesloft and start your cadence like normal. Then:
+Start your cadence in Salesloft as usual. Then:
 
 | You want to... | Press | Or click |
 |---|---|---|
-| Start the next call | <kbd>→</kbd> | 🟢 **▶ Call** |
-| End the call, log "No Answer," move on | <kbd>←</kbd> | 🔴 **✕ No Answer** |
+| Start the next call | <kbd>→</kbd> | the green **Call** button |
+| End the call, log "No Answer", move on | <kbd>←</kbd> | the red **No Answer** button |
 
-<kbd>←</kbd> and <kbd>→</kbd> are just where it starts — **you can change them to
-any key you like, including the number pad.** Most reps end up on the pad, one
-hand on it all day: see [Choosing your keys](#choosing-your-keys).
+Only use the red button for no-answers. If someone picks up, end and log that call the normal way.
 
-The buttons show the key that's actually set, so you never have to remember
-which is which — whatever you bind is printed right on them. (Just the one key,
-yours. Chrome's own from-another-tab shortcuts are listed in settings, and hover
-a button to see both.)
+The line under the buttons tells you what's happening ("Ending call…", "Logged No Answer ✓"). Its dot turns green and it reads **Connected** while a call is up, with a timer on the right.
 
-### Reading the plate
-
-The dark slab the buttons sit on is the plate. Bottom to top:
-
-| Part | What it tells you |
-|---|---|
-| **The line along the bottom** | What the extension is doing right now — "Ending call…", "Logged No Answer ✓". The dot at its left turns 🟢 green and it reads **Connected** while a call is up. |
-| **The clock on the right** | How long you've been on this call. (With transcription on it moves up into the transcript header.) |
-| **The two buttons** | Your two actions, with the key bound to each printed on it. |
-| **A coloured band above them** | A [contact alert](#contact-alerts) — only appears when this person carries a tag worth knowing about. |
-
-### Moving it
-
-**Drag the plate anywhere on the page.** Grab it by its dark edge — anywhere
-that isn't a button — and let go; it carries a little momentum and settles.
-It won't go off screen, and it stays where you left it, on this computer, until
-you move it again.
-
-> [!TIP]
-> Only use the red button for no-answers. If someone picks up, after the conversation end the call like normal.
+**Move it** by dragging the dark edge around the buttons. It stays where you leave it.
 
 ---
 
-## Choosing your keys
+## Change your keys
 
 1. Click the extension icon in your toolbar.
-2. Look under **KEY BINDINGS**.
-3. Click the key shown next to an action.
-4. Press the key you want.
+2. Under **Key bindings**, click the key next to an action.
+3. Press the key you want. It saves straight away, and the button on the page changes to match.
 
-That's it — it saves straight away, and the button on the plate changes to match.
+- **Any key works**, including the number pad. Num Lock doesn't matter.
+- **The keys work** on the Salesloft page and in the floating panel. They're ignored while you type in a box, so taking notes never dials anybody.
+- **From another tab**, Chrome's own shortcuts do the same jobs (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd> and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>0</kbd> unless another extension already has them). The settings list which ones Chrome actually gave you, and **Chrome shortcuts** opens the page to change them.
+- **Clear a key** with the small ✕ next to it.
 
-| | |
-|---|---|
-| **Any key works** | <kbd>F8</kbd>, <kbd>Num 1</kbd>, <kbd>Num +</kbd>, <kbd>Ctrl</kbd>+<kbd>K</kbd> — whatever your hand already rests on. Num Lock doesn't matter. |
-| **Where they work** | On the Salesloft page, and in the floating panel if you use one. |
-| **When they don't** | While you're typing in a box — so taking notes mid-call never dials anybody. |
-| **Two keys, two jobs** | Give one action a key that already belongs to the other and it moves across; the row it came from shows "Not set" so you can see it went. |
-| **Clearing one** | The small ✕ next to it. The button and Chrome's shortcut still work. |
+The key printed on each button is always the one that works, so you never have to remember it.
+
+---
+
+## Not in Service (optional)
+
+For numbers that are disconnected. One action logs the call as **Not in Service** and takes the person out of the cadence, so you never dial them again.
+
+**Turn it on:** click the extension icon and switch on **Not in Service button**. A small button appears under the other two, bound to <kbd>↑</kbd>.
+
+**Use it:** press <kbd>↑</kbd> (or click the button) **twice**. The first press turns it red and asks "Remove from cadence?". The second press, within 3 seconds, does it. If you don't press again, it quietly goes back to normal.
+
+The disposition it logs is its own setting, **Not in Service disposition**. Like the other one, it must match Salesloft's dropdown text exactly.
 
 ---
 
 ## Contact alerts
 
-The extension reads the Disposition and Sentiment tags already on the contact's page and shows
-a colour-coded alert before you dial, in the floating panel, and as a band that
-opens above the buttons on the page.
+Before you dial, the extension reads the Disposition and Sentiment tags already on the contact's page. If it finds one on your watch list, a coloured band opens above the buttons (and in the floating panel, if you use it). It only reads what's on the page. Nothing is sent or saved.
 
-The dispositions and sentiments it alerts to can be customized on the settings menu.
+Change which tags it watches in the settings under **Contact alerts**.
 
 ---
 
 ## Settings
 
-Click the extension's icon in your toolbar to open settings:
+Click the extension icon to open them.
 
 | Setting | What it does |
 |---|---|
-| **Floating panel** | Puts the buttons in their own little window that you can drag anywhere — even a second monitor. It stays open while you work in other tabs. |
-| **Buttons on Salesloft page** | Shows or hides the plate in the corner of a contact's page. Turn off if you're using the floating panel or just the keyboard. |
-| **Disposition** | The label the red button logs. Set to "No Answer." Only change this if your team's dropdown uses different wording — it must match the dropdown option in Salesloft **exactly**, including capitalization. |
-| **Alert on tags** | Turns the contact alerts on or off. |
-| **Tags to watch** | Which tags trigger an alert, comma separated. Starts with No Interest, Bad Fit, Meeting Scheduled, Interested, Connected, Wrong Number, Do Not Contact. Each one must match Salesloft's wording exactly. The coloured pills underneath show you what each tag will look like. |
-| **Strict matching** | On by default: only counts a tag where Salesloft actually renders one — a pill on a logged call or meeting, a labelled Disposition/Sentiment field, or an activity table column. Keeps ordinary text like "we had a meeting scheduled last quarter" from setting it off. Turn it off only if your layout shows these tags somewhere unusual and you're not getting alerts. |
-| **Key bindings** | The key for each button — press the one you want, number pad included. See [Choosing your keys](#choosing-your-keys). |
-| **Chrome shortcuts** | Opens Chrome's own shortcut page, for the combinations that work from another tab. |
-| **Live transcription** | Turns the transcript on, in the floating panel and beside the on-page buttons. Transcription then starts by itself as soon as a call is detected. Transcripts are saved only when you click the ↓ button — text only, never audio, and nothing is downloaded on its own. Needs the transcription server running — see below. |
-| **Call audio output** | Which device you actually listen on. Get this wrong and the call plays somewhere you can't hear it. |
+| **Floating panel** | Puts the buttons in their own small window you can drag anywhere, even to a second monitor. It stays open while you work in other tabs. |
+| **Buttons on Salesloft page** | Shows or hides the buttons on the page. Turn it off if you only use the floating panel or the keys. |
+| **Compact bar** | Shrinks the buttons to a small bar while you're between calls. It opens back to full size during a call. (The Not in Service button isn't on the bar; use the full size or the floating panel for that.) |
+| **Disposition** | What the red button logs. Starts as "No Answer". Only change it if your team's dropdown says something different, and match it exactly, capitals included. |
+| **Not in Service button** | Turns on the third button. See [Not in Service](#not-in-service-optional). |
+| **Not in Service disposition** | What that button logs. Starts as "Not in Service". |
+| **Key bindings** | Your key for each action. See [Change your keys](#change-your-keys). |
+| **Alert on tags** | Turns contact alerts on or off. |
+| **Tags to watch** | Which tags raise an alert, separated by commas and spelled exactly as Salesloft spells them. Starts with No Interest, Bad Fit, Meeting Scheduled, Interested, Connected, Wrong Number and Do Not Contact. |
+| **Strict matching** | On by default. Only counts a tag where Salesloft shows it as a tag, so ordinary text like "we had a meeting scheduled last quarter" doesn't set it off. Turn it off only if you're missing alerts. |
+| **Live transcription** | See below. |
 
 ---
 
 ## Live transcription (optional)
 
-Shows you what the prospect just said, as text, while you're still on the call.
-It runs entirely on your own machine — no audio is recorded, saved, or sent
-anywhere.
+Shows what the prospect is saying, as text, while you're on the call. It runs entirely on your own computer. No audio is recorded, saved or sent anywhere. The setup files are for **Windows**.
 
 ### Set it up (once)
 
-**Step 1 — Install Python.** You need version 3.10 or newer, from
-[python.org](https://www.python.org/downloads/). On the **first screen** of the
-installer, tick **Add python.exe to PATH** before clicking Install.
+1. **Install Python** 3.10 or newer from [python.org](https://www.python.org/downloads/). On the installer's first screen, tick **Add python.exe to PATH**.
+2. **Double-click `Install.cmd`** in the folder you downloaded.
+3. **Wait** a few minutes until it says **"Setup complete"**, then close the window. If something goes wrong it stops and tells you what; see the **Setup** section of [docs/troubleshooting.md](docs/troubleshooting.md).
 
-**Step 2 — Run the installer.** Open the folder you downloaded in
-[Step 1](#step-1--download-the-folder) and **double-click `Install.cmd`**.
+### Use it (each day)
 
-**Step 3 — Wait for it.** It takes a few minutes, mostly downloading the speech
-model so your first call isn't spent waiting. When it says **"Setup complete"**,
-close the window.
+1. **Double-click `Start Server.cmd`** and leave that window open. Closing it turns transcription off.
+2. Click the extension icon and switch on **Live transcription**. Click **Test server** to check it's connected.
+3. **Arm it once** by pressing <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>8</kbd> with the Salesloft tab in front. Until you do, the transcript says it's not armed. This is a Chrome rule, and once armed it stays armed.
 
-✅ If anything goes wrong it stops and tells you what happened — the **Setup**
-section of [docs/troubleshooting.md](docs/troubleshooting.md) covers the common
-ones.
-
-### Start it (each day)
-
-**Step 1 — Start the server.** Double-click **`Start Server.cmd`** before your
-call block and **leave that window open**. Closing it turns transcription off.
-
-**Step 2 — Turn it on.** Click the extension icon and switch on **Live
-transcription**.
-
-**Step 3 — Check it.** Click **Test server**. It should confirm the two are
-talking to each other.
+The transcript appears beside the buttons and starts by itself when a call does. It keeps the last few calls, so you can look back at the previous one while dialing the next. You can shrink it to a thin strip, pause it, or save it with the ↓ button. Nothing is ever saved unless you click that.
 
 > [!TIP]
-> Tired of remembering? **Double-click `Auto-start.cmd`** and the server starts
-> by itself, minimised, every time you log in. Double-click it again to switch
-> that back off. The catch: the server keeps the speech model loaded — about a
-> gigabyte of memory — from login until you close it. That's what makes the
-> first call of the day as fast as the rest.
-
-The on-page pane keeps the last few calls, one after another with a divider
-between them, so you can still look back at the previous conversation while
-you're dialing the next person.
-
-### If something looks wrong
-
-[docs/troubleshooting.md](docs/troubleshooting.md) covers the common ones —
-can't hear the prospect, "not armed", "offline", the transcript falling behind,
-and lines appearing that were never said.
+> **Double-click `Auto-start.cmd`** to have the server start by itself every time you log in. Double-click it again to turn that off. It uses about 1 GB of memory while it runs.
 
 ---
 
 ## If something isn't working
 
 <details>
-<summary><strong>No buttons on the Salesloft page?</strong></summary>
+<summary><strong>No buttons on the Salesloft page</strong></summary>
 
-1. Check you're on a **person's page** — the plate stays out of the way everywhere else (your dashboard, a cadence, the People list).
+1. Make sure you're on a **person's page**. The buttons stay hidden on your dashboard, cadences and the People list.
 2. Refresh the Salesloft tab.
 3. Click the extension icon and check **Buttons on Salesloft page** is on.
+4. You may have dragged them somewhere else. Check the edges of the page.
 </details>
 
 <details>
-<summary><strong>Can't find the buttons — did they move?</strong></summary>
+<summary><strong>Pressing the key does nothing</strong></summary>
 
-The plate remembers wherever you last dragged it, so it may not be in the
-bottom-left corner any more. It's always fully on screen somewhere; scan the
-edges of the Salesloft tab, then drag it back where you want it.
+1. Make sure a Salesloft tab is open.
+2. Refresh it and try again.
+3. Look at the button: the key printed on it is the one that works. If it's blank, that action has no key; set one in the settings.
 </details>
 
 <details>
-<summary><strong>Pressed the key and nothing happened?</strong></summary>
+<summary><strong>The line under the buttons says "Stopped"</strong></summary>
 
-1. Make sure a Salesloft tab is actually open in Chrome.
-2. Refresh that tab once and try again.
-3. Look at the button: whatever key is bound is printed right on it. Blank means that action has no key.
-
-Remember those keys work on the Salesloft page and in the floating panel — from
-another tab it's Chrome's shortcut that does it, and Chrome leaves a shortcut
-unset when another extension already uses that combination. The settings popup
-lists what Chrome has.
+The extension couldn't find something it expected on the Salesloft page, usually because the page was slow to load. Finish that call by hand and carry on. If it happens on every call, Salesloft has probably changed its page and the extension needs an update; tell whoever gave it to you.
 </details>
 
 <details>
-<summary><strong>The status line says "Stopped" or "Timed out"?</strong></summary>
+<summary><strong>Not in Service says it needs the full plate</strong></summary>
 
-The extension couldn't find a button it expected — this can happen if Salesloft
-is loading slowly or changed its screen layout. Finish logging that one call by
-hand and keep going. If it happens on every call, tell whoever gave you this
-extension — Salesloft may have updated their site and the extension needs a
-small fix.
+The Not in Service button isn't on the compact bar, because it asks you to confirm and the bar has nowhere to show that. Turn **Compact bar** off, or use the floating panel.
 </details>
 
 <details>
-<summary><strong>It logged something with the wrong disposition?</strong></summary>
+<summary><strong>A call was logged with the wrong disposition</strong></summary>
 
-Check the **Disposition** field in settings — it must match your Salesloft
-dropdown word-for-word.
+Check **Disposition** (or **Not in Service disposition**) in the settings. It must match your Salesloft dropdown word for word.
 </details>
 
 <details>
-<summary><strong>Not seeing an alert on a contact you know is tagged?</strong></summary>
+<summary><strong>Missing an alert, or getting one you shouldn't</strong></summary>
 
-1. Open settings (click the extension icon) and look for a **CONTACT ALERTS** section. No section means you're running an older build — go to `chrome://extensions` and reload it, making sure you pointed Chrome at the **`extension`** folder ([Step 4](#step-4--load-the-extension)).
-2. Check the tag in **Tags to watch** matches Salesloft's wording exactly — "No Interest" and "Not Interested" are different text.
-3. Still nothing? Try turning **Strict matching** off.
+- **Missing:** check the tag in **Tags to watch** matches Salesloft's wording exactly ("No Interest" and "Not Interested" are different). If it does, try turning **Strict matching** off.
+- **Unwanted:** turn **Strict matching** on, or remove tags you don't need from **Tags to watch**.
 </details>
 
 <details>
-<summary><strong>Getting an alert that doesn't belong?</strong></summary>
+<summary><strong>The extension disappeared after a restart</strong></summary>
 
-Turn **Strict matching** back on — that's the setting that stops ordinary text
-on the page from counting as a tag. If it's already on, narrow **Tags to watch**
-to just the tags you care about.
+The folder was probably moved or deleted. Put it back (or download it again), then go to `chrome://extensions` and click **Load unpacked** again.
 </details>
 
-<details>
-<summary><strong>The extension disappeared after restarting your computer?</strong></summary>
-
-The folder from Step 1 probably got moved or deleted. Put it back (or download
-it again — [Step 1](#step-1--download-the-folder)), go to `chrome://extensions`,
-and click **Load unpacked** again.
-</details>
+Transcription problems (can't hear the prospect, "offline", falling behind) are covered in [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ---
 
 ## Good to know
 
-- The extension only runs on `app.salesloft.com`. It can't see or touch any other website.
-- It doesn't store your calls, contacts, or any prospect data anywhere. It just clicks the same buttons you would click, faster.
-- Contact alerts only read what's already on the page in front of you. Nothing about a contact is sent anywhere or saved.
-- Where you dragged the plate is remembered on that computer only — not synced to your other machines, and not sent anywhere.
-- The red button never logs a call without setting the disposition first — if any step fails, it stops and tells you, rather than logging something half-finished.
-- Transcription runs on your own machine. Audio is never recorded, never written to disk, and never sent over the internet — it exists in memory for a few seconds and is discarded. Transcript text is only saved when you click the save button — no call writes a file on its own.
-- If transcription breaks, it goes quiet and the call carries on. It will never interrupt you mid-conversation with a popup.
-
----
+- It only runs on `app.salesloft.com` and can't see any other website.
+- It doesn't store your calls, contacts or prospect data. It clicks the same buttons you would, faster.
+- It never logs a call without setting the disposition first. If any step fails, it stops and tells you rather than logging something half-finished.
+- Not in Service logs the call before removing the person, never the other way round.
+- If transcription breaks, it goes quiet and the call carries on. It never interrupts you with a popup.
