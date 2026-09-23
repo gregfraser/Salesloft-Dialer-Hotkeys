@@ -59,6 +59,19 @@ console.log('\nThe two flows I did not touch');
   await p.close();
 }
 {
+  // The read-back now looks past the toggle to the field around it. It must
+  // still refuse a pick that did not take, or the call logs with no disposition.
+  const p = await open({ pageOverlay: true, notInService: true },
+                       { inCall: true, downshiftMenu: true, dispositionSticks: false });
+  await act(p, 'kill-and-log');
+  await p.waitForTimeout(10000);
+  eq('a pick that does not take in that field still stops before logging', await acted(p),
+     ['End Call', 'disposition=No Answer']);
+  const s = await statusText(p);
+  check('and says why', s.startsWith('Stopped:') && s.includes('did not take'), 'status was: ' + s);
+  await p.close();
+}
+{
   // "Call" has to be found by its exact visible text, and the mock's other
   // buttons must not satisfy that.
   const p = await open({ pageOverlay: true, notInService: true }, {});

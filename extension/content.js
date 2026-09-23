@@ -266,13 +266,33 @@
     } catch (e) { /* never let logging break a flow */ }
   }
 
-  // What the control says it holds now. A combobox is either a button whose
-  // label becomes the choice or an input whose value does, so both are read.
-  function dispositionValue(toggle) {
-    const field = toggle.matches('input') ? toggle
-      : (toggle.closest('div') || toggle).querySelector('input');
-    if (field && typeof field.value === 'string' && field.value.trim()) return field.value.trim();
-    return (toggle.textContent || '').replace(/\s+/g, ' ').trim();
+  // The disposition field as an element that outlives the click. Salesloft
+  // swaps the toggle's chevron for a clear (×) button once a value is picked,
+  // so the toggle the flow clicked is detached by the time it reads back, and
+  // the value is in an input beside it rather than in any button's text.
+  // Downshift puts that input and the toggle side by side, so the nearest
+  // ancestor holding exactly one input is the field. More than one means the
+  // climb has left the field (Sentiment, the due date), and it stops there.
+  function dispositionField(toggle) {
+    let el = toggle;
+    for (let i = 0; i < 5 && el && el !== document.body; i++) {
+      const inputs = el.querySelectorAll('input').length;
+      if (inputs === 1) return el;
+      if (inputs > 1) break;
+      el = el.parentElement;
+    }
+    return toggle.closest('div') || toggle;
+  }
+
+  // What the field says it holds now: the input's value, or else its text with
+  // any list inside it left out, so an open menu's options never read as the
+  // choice.
+  function dispositionValue(field) {
+    const input = field.matches('input') ? field : field.querySelector('input');
+    if (input && typeof input.value === 'string' && input.value.trim()) return input.value.trim();
+    const copy = field.cloneNode(true);
+    copy.querySelectorAll(OPEN_LISTS + ',[role="option"]').forEach((n) => n.remove());
+    return (copy.textContent || '').replace(/\s+/g, ' ').trim();
   }
 
   const OPEN_LISTS = '[role="listbox"],[role="menu"],ul';
@@ -291,6 +311,7 @@
     // disposition being looked for. The click landed on one of those, the field
     // stayed empty, and the flow carried on as though it had chosen.
     const shownBefore = new Set([...document.querySelectorAll(OPEN_LISTS)].filter(isShown));
+    const field = dispositionField(toggle);
     realClick(toggle);
     const option = await waitFor(
       () => dispositionOption(toggle, shownBefore, value),
@@ -302,10 +323,22 @@
     // Read it back. "Never log with a wrong or missing disposition" was only an
     // intention while nothing checked, and a click that misses is silent — the
     // control simply stays empty and the next step logs the call without it.
+    // Read from the field captured before the click, and if React has replaced
+    // even that, from wherever the field is now.
+    const current = () => {
+      if (field.isConnected) return field;
+      const t = findDispositionToggle();
+      return t ? dispositionField(t) : field;
+    };
     await waitFor(
-      () => dispositionValue(toggle).toLowerCase().includes(value.toLowerCase()),
+      () => dispositionValue(current()).toLowerCase().includes(value.toLowerCase()),
       CONFIG.stepTimeout
     ).catch(() => {
+      try {
+        const f = current();
+        console.warn('[dialer] disposition did not read back. Field:',
+          { tag: f.tagName, connected: f.isConnected, read: dispositionValue(f).slice(0, 80) });
+      } catch (e) { /* never let logging break a flow */ }
       throw new Error(`"${value}" did not take in the Disposition field`);
     });
   }
