@@ -538,12 +538,13 @@
   function notInService() {
     if (busy || !settings.notInService) return;
     // The arming *is* the confirmation, so it has to be somewhere the rep can
-    // see it. With the on-page controls off there is no strip to turn red, and
-    // arming silently would mean a second keypress removing someone from a
-    // cadence with nothing having asked. The panel confirms on its own surface
-    // and commits directly, so it never lands here.
+    // see it. Two surfaces have no strip to turn red — the page controls off
+    // entirely, and the compact bar, which deliberately does not carry this
+    // control — and arming silently on either would mean a second keypress
+    // removing someone from a cadence with nothing having asked. The panel
+    // confirms on its own surface and commits directly, so it never lands here.
     if (!nis) {
-      setStatus('Not in Service needs the on-page buttons or the floating panel', 'err');
+      setStatus('Not in Service needs the full plate or the floating panel', 'err');
       return;
     }
     if (!armed) {
@@ -1101,17 +1102,24 @@
     return !!settings.compactBar && lastCallState !== 'IN_CALL' && !busy;
   }
 
-  function miniAction(glyph, action, background, onClick) {
+  // Drawn, like every other centred mark on this plate. The first cut of this
+  // button set textContent and centred it with flex, which is the one thing the
+  // icon rule exists to stop: flex centres the line box and a glyph sits
+  // wherever its own font puts it inside that box, so ✕ and ▶ both rode high
+  // and off-centre in a 26px square. The big faces get away with text glyphs
+  // because they are corner-aligned and nothing is being centred; these are
+  // centred, so they are SVG.
+  function miniAction(icon, action, background, onClick) {
     const b = document.createElement('button');
     b.className = 'sl-act sl-mini';
     b.type = 'button';
-    b.textContent = glyph;
+    b.innerHTML = icon;
     b.style.cssText = [
       `width:${COMPACT_ACTION}px`, `height:${COMPACT_ACTION}px`, 'flex:0 0 auto',
       'display:flex', 'align-items:center', 'justify-content:center',
       'border:none', 'border-radius:7px', 'cursor:pointer', 'color:#fff',
       `background:${background}`, `box-shadow:${BUTTON_SHADOW}`,
-      `font-size:${TYPE.caption}px`, 'line-height:1', 'font-family:inherit', 'user-select:none',
+      'line-height:1', 'font-family:inherit', 'user-select:none', 'padding:0',
     ].join(';');
     b.addEventListener('click', onClick);
     // No keycap fits at 26px, so the key lives in the tooltip alone. paintKeys
@@ -1518,9 +1526,9 @@
 
     row.appendChild(buildStatusRow());
 
-    const kill = miniAction('✕', 'kill-and-log',
+    const kill = miniAction(window.SL_ICONS.clear, 'kill-and-log',
       'linear-gradient(180deg,#d9503f 0%,#a02c1d 100%)', killAndLog);
-    const call = miniAction('▶', 'start-call',
+    const call = miniAction(window.SL_ICONS.play, 'start-call',
       'linear-gradient(180deg,#2aa55c 0%,#13623a 100%)', startCall);
     row.appendChild(kill);
     row.appendChild(call);

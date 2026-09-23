@@ -177,6 +177,28 @@ const plate = (p) => p.evaluate(() => {
         (await p.$('#sl-hotkey-overlay')) === null);
   await p.close();
 }
+{
+  // The shipped key is an arrow now, and the compact bar has no strip to arm.
+  // Refusing has to say something true on that surface, not "turn the on-page
+  // buttons on" to a rep who already has.
+  const p = await open({ pageOverlay: true, compactBar: true, notInService: true,
+                         hotkeys: { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight',
+                                    'not-in-service': 'ArrowUp' } }, {});
+  await p.keyboard.press('ArrowUp');
+  await p.waitForTimeout(400);
+  const s = await statusText(p);
+  check('the key refuses on the compact bar and says why', s.includes('full plate'), 'status was: ' + s);
+  eq('and takes no action', await acted(p), []);
+  await p.close();
+}
+{
+  const p = await open({ pageOverlay: true, notInService: true }, {});
+  await p.keyboard.press('ArrowUp');
+  await p.waitForTimeout(400);
+  check('the shipped arrow arms on the full plate',
+        (await p.textContent('#sl-hotkey-overlay .sl-second .sl-second-label')) === 'Remove from cadence?');
+  await p.close();
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) console.log('failures:\n  ' + errs.join('\n  '));

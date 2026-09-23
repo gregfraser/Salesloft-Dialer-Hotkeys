@@ -52,12 +52,12 @@
     // The keys the rep picked for the three dialer actions. See the section
     // below for why the extension keeps its own bindings at all, and why an
     // empty string (no key) is a normal value.
-    // 'not-in-service' ships unbound on purpose. The two arrows sit under the
-    // hand that is already on the plate, and a third arrow would be ArrowDown —
-    // which is how the rep scrolls the Salesloft page. Empty is a normal value
-    // and every surface prints no keycap for it, so the strip reads as unbound
-    // until the rep picks a key in the settings popup.
-    hotkeys: { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight', 'not-in-service': '' },
+    // The three sit under one hand: left and right for the pair, up for the
+    // third. A bound arrow stops scrolling the Salesloft page while the overlay
+    // is loaded, because the in-page handler preventDefaults whatever it
+    // matches — already true of left and right, and now of up. Empty is still a
+    // normal value here: a rep who wants the page back clears it in the popup.
+    hotkeys: { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight', 'not-in-service': 'ArrowUp' },
   };
 
   root.SL_DEFAULTS = DEFAULTS;

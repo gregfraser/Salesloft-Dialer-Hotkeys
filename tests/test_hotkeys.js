@@ -142,20 +142,29 @@ test('the shipped defaults are the arrow keys, labelled as arrows', () => {
   assert.deepStrictEqual(DEFAULTS.hotkeys, {
     'kill-and-log': 'ArrowLeft',
     'start-call': 'ArrowRight',
-    // Deliberately unbound: the third arrow is ArrowDown, which is how the rep
-    // scrolls the Salesloft page. They pick their own key in the popup.
-    'not-in-service': '',
+    'not-in-service': 'ArrowUp',
   });
   assert.strictEqual(slHotkeyLabel('ArrowLeft', true), '←');
   assert.strictEqual(slHotkeyLabel('ArrowRight', false), '→');
+  assert.strictEqual(slHotkeyLabel('ArrowUp', true), '↑');
   assert.strictEqual(slHotkeyFromEvent(keyEvent('ArrowLeft')), 'ArrowLeft');
 });
 
-test('an action that ships unbound normalises to no key, not to undefined', () => {
+test('the three shipped arrows are three different keys', () => {
+  // One key, one action: if two of these matched, slNormalizeHotkeys would
+  // silently blank the second and a button would ship claiming a key that
+  // does nothing.
+  const normalized = slNormalizeHotkeys(DEFAULTS.hotkeys);
+  const bound = SL_HOTKEY_ACTIONS.map((a) => normalized[a]);
+  assert.deepStrictEqual(bound, ['ArrowLeft', 'ArrowRight', 'ArrowUp']);
+  assert.strictEqual(new Set(bound).size, bound.length);
+});
+
+test('an action with no key normalises to empty, not to undefined', () => {
   // The content script and the panel both index this by action on every
   // keypress. A missing entry there would compare undefined against a string
   // on every keystroke rather than reading as "this action has no key".
-  const normalized = slNormalizeHotkeys(DEFAULTS.hotkeys);
+  const normalized = slNormalizeHotkeys({ 'kill-and-log': 'ArrowLeft' });
   assert.strictEqual(normalized['not-in-service'], '');
   assert.strictEqual(slHotkeyLabel(normalized['not-in-service'], true), '');
 });
