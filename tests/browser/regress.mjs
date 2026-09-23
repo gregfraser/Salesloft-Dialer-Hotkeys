@@ -17,7 +17,12 @@ async function open(settings, mockOpts) {
   await page.addInitScript((s) => { window.__slSettings = s; window.__slCommandKeys = {}; }, settings);
   await page.goto('file://' + HERE + '/mock.html');
   await page.waitForTimeout(250);
-  if (mockOpts) { await page.evaluate((o) => window.__buildSalesloft(o), mockOpts); await page.waitForTimeout(50); }
+  if (mockOpts) {
+    await page.evaluate((o) => window.__buildSalesloft(o), mockOpts);
+    // syncOverlay() rides a 250ms debounce behind the MutationObserver, so a
+    // rebuilt page needs longer than a frame before it has settled.
+    await page.waitForTimeout(500);
+  }
   return page;
 }
 const acted = (p) => p.evaluate(() => window.__acted);
@@ -92,6 +97,39 @@ console.log('\nToggling the setting live');
   await p.click('#sl-hotkey-overlay .sl-second');
   await p.waitForTimeout(800);
   eq('so the next press arms rather than committing', await acted(p), []);
+  await p.close();
+}
+
+console.log('\nWhere the plate is allowed to be');
+{
+  // The cadence People list: the logger popout is open over it, but nothing
+  // has been dialled. A dialer plate has no business beside 170 rows.
+  const p = await open({ pageOverlay: true, notInService: true }, { listPage: true });
+  check('a list page with an open popout gets no plate',
+        (await p.$('#sl-hotkey-overlay')) === null);
+  await p.close();
+}
+{
+  // Same page, but the call is up. Taking the buttons away mid-call is the one
+  // outcome worse than showing them early.
+  const p = await open({ pageOverlay: true, notInService: true }, { listPage: true });
+  await p.evaluate(() => { window.__slCallState = 'IN_CALL'; });
+  await p.evaluate(() => {
+    // call-detect reports through the same path a real detection would.
+    const el = document.createElement('button');
+    el.setAttribute('aria-label', 'End Call');
+    el.textContent = 'End Call';
+    document.getElementById('app').appendChild(el);
+  });
+  await p.waitForTimeout(1200);
+  check('once a call is up, the plate comes back on that same page',
+        (await p.$('#sl-hotkey-overlay')) !== null);
+  await p.close();
+}
+{
+  const p = await open({ pageOverlay: true, notInService: true }, {});
+  check('a contact view still gets the plate with no call at all',
+        (await p.$('#sl-hotkey-overlay')) !== null);
   await p.close();
 }
 

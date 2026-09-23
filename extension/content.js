@@ -137,14 +137,19 @@
     );
   }
 
-  function waitFor(fn, timeout = CONFIG.stepTimeout, interval = 100) {
+  // `what` names the thing being waited for, so a timeout says which step gave
+  // up rather than "Timed out waiting for element" — which told a rep nothing
+  // and told whoever read the bug report even less.
+  function waitFor(fn, timeout = CONFIG.stepTimeout, interval = 100, what) {
     return new Promise((resolve, reject) => {
       const start = Date.now();
       const tick = () => {
         let result;
         try { result = fn(); } catch (e) { /* keep polling */ }
         if (result) return resolve(result);
-        if (Date.now() - start > timeout) return reject(new Error('Timed out waiting for element'));
+        if (Date.now() - start > timeout) {
+          return reject(new Error(what ? `could not find ${what}` : 'Timed out waiting for element'));
+        }
         setTimeout(tick, interval);
       };
       tick();
@@ -162,6 +167,21 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // Salesloft moves, and when it does the status strip has room for one
+  // sentence. This is the rest of it: which element each step actually picked,
+  // in the page's own console, where a rep can copy it into a bug report. Quiet
+  // by default — console.debug is hidden unless Verbose is on in DevTools — and
+  // it never carries anything the prospect said.
+  function trace(step, el) {
+    try {
+      console.debug('[dialer]', step, el && {
+        tag: el.tagName,
+        label: el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('data-testid')),
+        text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60),
+      });
+    } catch (e) { /* never let logging break a flow */ }
+  }
+
   // ---------------- Disposition (Downshift combobox) ----------------
   function findDispositionToggle() {
     const root = loggerRoot();
@@ -173,20 +193,71 @@
     );
   }
 
+  // Which list the toggle just opened. Downshift names it — `aria-controls`, or
+  // the `-menu` twin of the toggle's own `-toggle-button` id — and that is worth
+  // using, because the alternative is searching the page and the page is full of
+  // decoys. `opened` is whatever lists existed before the toggle was clicked, so
+  // a build that names nothing still resolves to the one that just appeared.
+  function dispositionList(toggle, opened) {
+    const named = toggle.getAttribute('aria-controls') || toggle.getAttribute('aria-owns');
+    if (named) {
+      const el = document.getElementById(named);
+      if (el && isShown(el)) return el;
+    }
+    if (toggle.id && /-toggle-button$/.test(toggle.id)) {
+      const el = document.getElementById(toggle.id.replace(/-toggle-button$/, '-menu'));
+      if (el && isShown(el)) return el;
+    }
+    return [...document.querySelectorAll('[role="listbox"],[role="menu"],ul')]
+      .find((el) => !opened.has(el) && isShown(el)) || null;
+  }
+
+  // What the control says it holds now. A combobox is either a button whose
+  // label becomes the choice or an input whose value does, so both are read.
+  function dispositionValue(toggle) {
+    const field = toggle.matches('input') ? toggle
+      : (toggle.closest('div') || toggle).querySelector('input');
+    if (field && typeof field.value === 'string' && field.value.trim()) return field.value.trim();
+    return (toggle.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  const OPEN_LISTS = '[role="listbox"],[role="menu"],ul';
+
   async function setDisposition(value) {
     const toggle = await waitFor(() => {
       const t = findDispositionToggle();
       return t && t.offsetParent !== null ? t : null;
     });
-    realClick(toggle);
 
+    // Scoped to the list the toggle opened, never to the document. It used to
+    // be `[role="option"], [role="listbox"] li, ul li` across the whole page,
+    // and `ul li` matches every list item Salesloft renders — so on a contact
+    // who has been logged "Not in Service" a dozen times, the activity feed and
+    // the cadence sidebar are full of elements whose entire text is exactly the
+    // disposition being looked for. The click landed on one of those, the field
+    // stayed empty, and the flow carried on as though it had chosen.
+    const opened = new Set(document.querySelectorAll(OPEN_LISTS));
+    realClick(toggle);
+    const list = await waitFor(
+      () => dispositionList(toggle, opened), CONFIG.stepTimeout, 100, 'the Disposition list');
     const option = await waitFor(() => {
-      const items = [...document.querySelectorAll('[role="option"], [role="listbox"] li, ul li')];
+      const items = [...list.querySelectorAll('[role="option"],li,[role="menuitem"]')];
       return items.find(
-        (li) => li.offsetParent !== null && li.textContent.trim().toLowerCase() === value.toLowerCase()
+        (li) => isShown(li) && li.textContent.replace(/\s+/g, ' ').trim().toLowerCase() === value.toLowerCase()
       );
-    });
+    }, CONFIG.stepTimeout, 100, `"${value}" in the Disposition list`);
+    trace('disposition option', option);
     realClick(option);
+
+    // Read it back. "Never log with a wrong or missing disposition" was only an
+    // intention while nothing checked, and a click that misses is silent — the
+    // control simply stays empty and the next step logs the call without it.
+    await waitFor(
+      () => dispositionValue(toggle).toLowerCase().includes(value.toLowerCase()),
+      CONFIG.stepTimeout
+    ).catch(() => {
+      throw new Error(`"${value}" did not take in the Disposition field`);
+    });
   }
 
   // ---------------- Not in Service (DOM) ----------------
@@ -217,16 +288,72 @@
     );
   }
 
+  // What a screen reader would call this element. An icon button gets its name
+  // from any of several places, and reading only `aria-label` is how the
+  // cadence control came to be unfindable: Salesloft names it from the
+  // `<title>` inside its SVG — which is what a recorded
+  // `::-p-aria(Remove person from cadence) >>>> ::-p-aria([role="graphics-symbol"])`
+  // was saying all along — so the attribute lookup found nothing and the step
+  // timed out after logging the call.
+  function accessibleName(el) {
+    const label = el.getAttribute('aria-label');
+    if (label && label.trim()) return label;
+
+    const owned = el.getAttribute('aria-labelledby');
+    if (owned) {
+      const text = owned.split(/\s+/)
+        .map((id) => { const node = document.getElementById(id); return node ? node.textContent : ''; })
+        .join(' ');
+      if (text.trim()) return text;
+    }
+
+    const title = el.getAttribute('title');
+    if (title && title.trim()) return title;
+
+    // An icon has no text, so its name lives in the <title> of its own artwork.
+    const drawn = el.querySelector('title');
+    if (drawn && drawn.textContent.trim()) return drawn.textContent;
+
+    return el.textContent || '';
+  }
+
   // The cadence's own control, on the page behind the logger rather than in it.
-  // Matched on its accessible name: it is an icon button with no text of its own.
   const REMOVE_FROM_CADENCE = /remove\s+(?:person|this person|them)?\s*from\s+(?:the\s+)?cadence/i;
 
+  // Every named control on the page, for when the one we wanted was not there.
+  // Names only — never a transcript line, never anything the prospect said.
+  function dumpNames() {
+    try {
+      const names = [...document.querySelectorAll('button,[role="button"],a[href]')]
+        .filter((el) => isShown(el))
+        .map((el) => accessibleName(el).replace(/\s+/g, ' ').trim())
+        .filter((name) => name && name.length < 60);
+      console.warn('[dialer] no Remove from cadence control. Named controls on the page:',
+        [...new Set(names)].sort());
+    } catch (e) { /* never let logging break a flow */ }
+  }
+
   function removeFromCadenceButton() {
-    return [...document.querySelectorAll('button,[role="button"]')].find((el) => {
-      if (!visible(el)) return false;
-      const name = el.getAttribute('aria-label') || el.getAttribute('title') || '';
-      return REMOVE_FROM_CADENCE.test(name);
-    });
+    const named = [];
+    for (const el of document.querySelectorAll('button,[role="button"],a[href]')) {
+      // Cheap first. Resolving a proper accessible name for every control on a
+      // Salesloft page, ten times a second for eight seconds, is not free — but
+      // the word has to appear *somewhere* on the element first, and
+      // textContent already reaches into the svg <title> where this one keeps
+      // its name. Only aria-labelledby puts the text in another element
+      // entirely, and almost nothing uses it.
+      const attrs = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`;
+      if (!el.hasAttribute('aria-labelledby') && !/cadence/i.test(attrs + ' ' + (el.textContent || ''))) continue;
+      if (!isShown(el) || el.disabled) continue;
+      const name = accessibleName(el).replace(/\s+/g, ' ').trim();
+      if (REMOVE_FROM_CADENCE.test(name)) named.push({ el, name });
+    }
+    if (!named.length) return null;
+    // Falling back to text content means an outer container holding the whole
+    // cadence panel can match as well as the button inside it. The tightest
+    // name is the control itself.
+    named.sort((a, b) => a.name.length - b.name.length);
+    return named[0].el;
   }
 
   // Salesloft asks before it removes someone. The dialog is not in the
@@ -236,10 +363,18 @@
   // the cadence when they are still in it.
   const CONFIRM_TEXTS = [
     'remove from cadence', 'remove person from cadence', 'remove', 'confirm',
-    'yes, remove', 'yes',
+    'yes, remove', 'yes', 'ok', 'delete', 'continue',
   ];
 
   const DIALOGS = '[role="dialog"],[role="alertdialog"]';
+
+  // A dialog is only this removal's confirmation if it says so. Being new is
+  // not enough: Salesloft throws toasts for unrelated things — "Task deleted
+  // for <someone else>", with a View and a dismiss — and a toast carrying a
+  // dialog role arrives in the same window and matches on novelty alone. So a
+  // candidate has to mention what it is about, and anything else on screen is
+  // left where it is rather than being answered.
+  const REMOVAL_WORDS = /cadence|remove/i;
 
   // `existing` is whatever was already open when the removal was clicked.
   // Salesloft's own logger popout carries role="dialog", so without that
@@ -250,17 +385,29 @@
     let dialog;
     try {
       dialog = await waitFor(
-        () => [...document.querySelectorAll(DIALOGS)].find((d) => !existing.has(d) && isShown(d)),
+        () => [...document.querySelectorAll(DIALOGS)].find(
+          (d) => !existing.has(d) && isShown(d) && REMOVAL_WORDS.test(d.textContent || '')
+        ),
         CONFIG.confirmTimeout
       );
     } catch (e) {
       return; // no confirmation step — the click above was the whole of it
     }
-    const button = [...dialog.querySelectorAll('button')].find(
-      (b) => visible(b) &&
-        CONFIRM_TEXTS.indexOf(b.textContent.replace(/\s+/g, ' ').trim().toLowerCase()) !== -1
+    const buttons = [...dialog.querySelectorAll('button')].filter(visible);
+    const button = buttons.find(
+      (b) => CONFIRM_TEXTS.indexOf(b.textContent.replace(/\s+/g, ' ').trim().toLowerCase()) !== -1
     );
-    if (!button) throw new Error('A dialog is open — confirm the removal there');
+    if (!button) {
+      // Name them. This dialog's wording is the one part of the flow that was
+      // never recorded, so a stop here has to hand back what it actually saw
+      // rather than leaving the next person to guess at it.
+      const labels = buttons.map((b) => b.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
+      throw new Error(
+        labels.length
+          ? `the removal dialog offers ${labels.map((l) => `"${l}"`).join(', ')} — confirm it there`
+          : 'a removal dialog is open — confirm it there'
+      );
+    }
     realClick(button);
   }
 
@@ -329,14 +476,28 @@
       await sleep(CONFIG.autoAdvanceDelayMs);
 
       setStatus('Logging…');
-      const menu = await waitFor(logMenuToggle);
+      const menu = await waitFor(
+        logMenuToggle, CONFIG.stepTimeout, 100, 'the Log & Complete menu');
+      trace('log menu', menu);
       realClick(menu);
-      const logOnly = await waitFor(() => menuItemByText('Log Only'));
+      const logOnly = await waitFor(
+        () => menuItemByText('Log Only'), CONFIG.stepTimeout, 100, '"Log Only" in that menu');
+      trace('Log Only', logOnly);
       realClick(logOnly);
       await sleep(CONFIG.autoAdvanceDelayMs);
 
       setStatus('Removing from cadence…');
-      const remove = await waitFor(removeFromCadenceButton);
+      const remove = await waitFor(
+        removeFromCadenceButton, CONFIG.stepTimeout, 100, 'the Remove from cadence control'
+      ).catch((err) => {
+        // The call is logged by this point, so this is the expensive failure:
+        // the rep has to finish by hand and nobody can see why. Put the names
+        // that *were* on the page into the console, where the next report can
+        // pick them up.
+        dumpNames();
+        throw err;
+      });
+      trace('remove from cadence', remove);
       // Snapshot first: only a dialog that was not already open can be this
       // removal's own.
       const openDialogs = new Set(document.querySelectorAll(DIALOGS));
@@ -613,16 +774,29 @@
   // so a whole day of dialing cannot pile up DOM on the Salesloft page.
   const MAX_RENDERED_LINES = 400;
 
-  // A contact can be on screen without the route saying so: the call logger
-  // pops out over whatever page the rep dialled from, and it is always about one
-  // person. Losing the buttons there would take them away exactly when a call is
-  // running, so the DOM gets the last word after the route.
-  const CONTACT_DOM = '[data-testid="popout-logger-container"],[data-testid*="person-detail" i]';
+  // A contact can be on screen without the route saying so — a person-detail
+  // view rendered inside another section is still one person — so the DOM gets
+  // a say after the route.
+  const CONTACT_DOM = '[data-testid*="person-detail" i]';
+
+  // The logger popout is a weaker signal than it looks. It opens over whatever
+  // the rep was on and *stays* open, so on a cadence's People list it is there
+  // beside 170 rows with nothing dialled — which is not a contact, and not
+  // somewhere a dialer plate belongs. But it is also the only thing on screen
+  // once a rep dials from that list, and taking the buttons away mid-call is
+  // the one outcome worse than showing them early. So the popout counts only
+  // while a call is actually up: browsing a cadence gets nothing, calling in
+  // one gets the buttons wherever it was started from.
+  const LOGGER_DOM = '[data-testid="popout-logger-container"]';
 
   function onContactPage() {
     if (window.slIsContactUrl && window.slIsContactUrl(location.href)) return true;
     try {
-      return !!document.querySelector(CONTACT_DOM);
+      if (document.querySelector(CONTACT_DOM)) return true;
+      if (!document.querySelector(LOGGER_DOM)) return false;
+      // busy as well as live: a flow part-way through logging keeps its plate
+      // and its status line even as the call it is about ends under it.
+      return lastCallState === 'IN_CALL' || busy;
     } catch (e) {
       return false;
     }

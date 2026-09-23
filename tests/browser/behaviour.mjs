@@ -26,7 +26,12 @@ async function open(settings, mockOpts) {
   }, settings);
   await page.goto('file://' + HERE + '/mock.html');
   await page.waitForTimeout(250);
-  if (mockOpts) { await page.evaluate((o) => window.__buildSalesloft(o), mockOpts); await page.waitForTimeout(50); }
+  if (mockOpts) {
+    await page.evaluate((o) => window.__buildSalesloft(o), mockOpts);
+    // syncOverlay() rides a 250ms debounce behind the MutationObserver, so a
+    // rebuilt page needs longer than a frame before it has settled.
+    await page.waitForTimeout(500);
+  }
   return page;
 }
 
@@ -90,8 +95,8 @@ console.log('\nThe confirmation dialog');
   const p = await open(ON, { confirm: true, confirmButtons: ['Cancel', 'Proceed anyway'] });
   await p.click(strip); await p.click(strip); await p.waitForTimeout(4000);
   const s = await statusText(p);
-  check('an unrecognised dialog stops rather than being left open', s.startsWith('Stopped:') && s.includes('dialog'),
-        'status was: ' + s);
+  check('an unrecognised dialog stops rather than being left open',
+        s.startsWith('Stopped:') && s.includes('removal dialog'), 'status was: ' + s);
   await p.close();
 }
 {
@@ -99,6 +104,32 @@ console.log('\nThe confirmation dialog');
   await p.click(strip); await p.click(strip); await p.waitForTimeout(3500);
   const s = await statusText(p);
   check('no dialog at all is a normal outcome', s.includes('removed from cadence'), 'status was: ' + s);
+  await p.close();
+}
+
+console.log('\nThe page as a real contact has it');
+{
+  // The bug from the field: the feed is full of "Not in Service" pills, and a
+  // document-wide `ul li` search clicked one of those instead of the option.
+  const p = await open(ON, {});
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(4000);
+  const a = await acted(p);
+  check('no decoy on the page is ever clicked', !a.some((x) => x.startsWith('DECOY')), a.join(' | '));
+  eq('the disposition comes from the list the toggle opened', a[0], 'disposition=Not in Service');
+  check('and the removal still happens', a.includes('remove from cadence'), a.join(' | '));
+  await p.close();
+}
+{
+  // A click that lands but does not take. Logging anyway is the thing the
+  // invariant forbids, so the flow has to stop here.
+  const p = await open(ON, { dispositionSticks: false });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(11000);
+  const a = await acted(p);
+  const s = await statusText(p);
+  check('a disposition that does not take stops the flow', s.startsWith('Stopped:') && s.includes('did not take'),
+        'status was: ' + s);
+  check('and nothing is logged or removed', !a.includes('Log Only') && !a.includes('remove from cadence'),
+        a.join(' | '));
   await p.close();
 }
 
@@ -131,14 +162,68 @@ console.log('\nThe dialog, as a real one is built');
   await p.close();
 }
 
+{
+  // An unrelated toast, carrying a dialog role, landing in the same window.
+  const p = await open(ON, { toast: true, confirm: false });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(4000);
+  const s = await statusText(p);
+  check('a toast about someone else is not mistaken for the confirmation',
+        s.includes('removed from cadence'), 'status was: ' + s);
+  eq('and it is left alone rather than answered', (await acted(p)).slice(-2),
+     ['remove from cadence', 'toast opened']);
+  await p.close();
+}
+{
+  const p = await open(ON, { toast: true, confirm: true });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(4000);
+  eq('the real dialog is still found past the toast', (await acted(p)).slice(-1), ['dialog:Remove']);
+  await p.close();
+}
+{
+  // The one part of the flow nobody recorded: what the buttons say.
+  const p = await open(ON, { confirm: true, confirmButtons: ['Keep them', 'Take them off'] });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(4000);
+  const s = await statusText(p);
+  check('an unknown dialog names its own buttons in the status',
+        s.includes('"Keep them"') && s.includes('"Take them off"'), 'status was: ' + s);
+  await p.close();
+}
+
 // ------------------------------------------------------------- failure paths
+console.log('\nHow an icon button carries its name');
+for (const nameFrom of ['svg-title', 'aria-label', 'title', 'labelledby']) {
+  const p = await open(ON, { nameFrom });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(4000);
+  check(`named by ${nameFrom}, the cadence control is still found`,
+        (await acted(p)).includes('remove from cadence'), (await statusText(p)));
+  await p.close();
+}
+{
+  // The tightest name wins: an outer container holding the whole cadence panel
+  // matches on text content too.
+  const p = await open(ON, {});
+  await p.evaluate(() => {
+    const wrap = document.createElement('div');
+    wrap.setAttribute('role', 'button');
+    wrap.textContent = 'Cadence actions: remove person from cadence, pause, skip';
+    wrap.style.cssText = 'width:200px;height:20px';
+    document.getElementById('app').prepend(wrap);
+    wrap.addEventListener('click', () => window.__acted.push('WRONG: outer container'));
+  });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(4000);
+  const a = await acted(p);
+  check('and a wrapper that merely mentions it is not clicked instead',
+        !a.some((x) => x.startsWith('WRONG')) && a.includes('remove from cadence'), a.join(' | '));
+  await p.close();
+}
+
 console.log('\nWhen Salesloft has moved');
 {
   const p = await open(ON, { noRemove: true });
   await p.click(strip); await p.click(strip); await p.waitForTimeout(11000);
   const s = await statusText(p);
-  check('a missing cadence control stops and says so', s.startsWith('Stopped:') && s.includes('Finish manually'),
-        'status was: ' + s);
+  check('a missing cadence control names itself rather than saying "element"',
+        s.includes('Remove from cadence control') && s.includes('Finish manually'), 'status was: ' + s);
   eq('but the call is still logged first', await acted(p),
      ['disposition=Not in Service', 'menu opened', 'Log Only']);
   await p.close();

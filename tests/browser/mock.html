@@ -17,6 +17,26 @@ window.__buildSalesloft = (opts = {}) => {
   app.innerHTML = '';
   window.__acted = [];
 
+  // A contact's own view, unless the case is explicitly the cadence People
+  // list — where the logger popout is open over 170 rows with nothing dialled.
+  app.removeAttribute('data-testid');
+  if (!opts.listPage) app.setAttribute('data-testid', 'person-detail-pane');
+
+  // A contact who has been dialled a dozen times has an activity feed and a
+  // cadence sidebar full of list items whose entire text is the very
+  // disposition the flow is looking for. This is the page as it really is, not
+  // an empty one.
+  if (opts.decoys !== false) {
+    const feed = document.createElement('ul');
+    for (const text of (opts.decoyTexts || ['Not in Service', 'No Answer', 'Not in Service'])) {
+      const li = document.createElement('li');
+      li.textContent = text;
+      li.addEventListener('click', () => note('DECOY CLICKED: ' + text));
+      feed.appendChild(li);
+    }
+    app.appendChild(feed);
+  }
+
   const logger = document.createElement('div');
   logger.setAttribute('data-testid', 'popout-logger-container');
   if (opts.loggerIsDialog) logger.setAttribute('role', 'dialog');
@@ -38,7 +58,8 @@ window.__buildSalesloft = (opts = {}) => {
   const toggle = document.createElement('button');
   toggle.id = 'downshift-1-toggle-button';
   toggle.setAttribute('aria-haspopup', 'listbox');
-  toggle.textContent = 'Select…';
+  toggle.setAttribute('aria-controls', 'disp-list');
+  toggle.textContent = opts.dispositionPreset || 'Select…';
   dispInner.appendChild(toggle);
   dispWrap.appendChild(dispLabel);
   dispWrap.appendChild(dispInner);
@@ -54,7 +75,13 @@ window.__buildSalesloft = (opts = {}) => {
       const li = document.createElement('li');
       li.setAttribute('role', 'option');
       li.textContent = name;
-      li.addEventListener('click', () => { note('disposition=' + name); toggle.textContent = name; ul.remove(); });
+      li.addEventListener('click', () => {
+        note('disposition=' + name);
+        // opts.dispositionSticks === false models a control that takes the
+        // click without recording it, which is what a misclick looks like.
+        if (opts.dispositionSticks !== false) toggle.textContent = name;
+        ul.remove();
+      });
       ul.appendChild(li);
     }
     document.body.appendChild(ul);
@@ -91,14 +118,47 @@ window.__buildSalesloft = (opts = {}) => {
   // The cadence control, outside the logger, named only by aria-label.
   if (!opts.noRemove) {
     const remove = document.createElement('button');
-    remove.setAttribute('aria-label', opts.removeLabel || 'Remove person from cadence');
-    remove.innerHTML = '<svg width="10" height="10"></svg>';
+    // How Salesloft really names it: not an aria-label on the button, but the
+    // <title> of the icon inside it. `nameFrom` switches between the ways an
+    // icon button can carry an accessible name, because reading only the
+    // attribute is what made this control unfindable in the field.
+    const NAME = opts.removeLabel || 'Remove person from cadence';
+    const nameFrom = opts.nameFrom || 'svg-title';
+    if (nameFrom === 'aria-label') remove.setAttribute('aria-label', NAME);
+    if (nameFrom === 'title') remove.setAttribute('title', NAME);
+    if (nameFrom === 'labelledby') {
+      const lbl = document.createElement('span');
+      lbl.id = 'remove-label';
+      lbl.textContent = NAME;
+      lbl.style.cssText = 'position:absolute;left:-9999px';
+      app.appendChild(lbl);
+      remove.setAttribute('aria-labelledby', 'remove-label');
+    }
+    remove.innerHTML = nameFrom === 'svg-title'
+      ? `<svg width="10" height="10" role="graphics-symbol"><title>${NAME}</title></svg>`
+      : '<svg width="10" height="10"></svg>';
+    remove.style.cssText = 'width:16px;height:16px';
     remove.addEventListener('click', () => {
       note('remove from cadence');
+      // Salesloft throws toasts for unrelated things. This one is about someone
+      // else entirely and carries a dialog role, and it lands in the same
+      // window the confirmation would.
+      if (opts.toast) {
+        const toast = document.createElement('div');
+        toast.setAttribute('role', 'alertdialog');
+        toast.style.cssText = 'position:fixed;top:10px;left:40%;background:#224;z-index:20';
+        toast.innerHTML = '<span>Task deleted for Joshua Tan.</span>' +
+          '<button>View</button><button>\u2715</button>';
+        document.body.appendChild(toast);
+        note('toast opened');
+      }
       if (!opts.confirm) return;
       const dialog = document.createElement('div');
       dialog.setAttribute('role', 'dialog');
       dialog.style.cssText = 'position:fixed;inset:30% 30%;background:#333;z-index:10';
+      const words = document.createElement('p');
+      words.textContent = opts.confirmText || 'Remove this person from the cadence?';
+      dialog.appendChild(words);
       for (const name of (opts.confirmButtons || ['Cancel', 'Remove'])) {
         const b = document.createElement('button');
         b.textContent = name;
