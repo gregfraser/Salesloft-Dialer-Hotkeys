@@ -411,13 +411,14 @@
         .filter((el) => isShown(el))
         .map((el) => accessibleName(el).replace(/\s+/g, ' ').trim())
         .filter((name) => name && name.length < 60);
-      console.warn('[dialer] no Remove from cadence control. Named controls on the page:',
+      console.warn('[dialer] no single Remove from cadence control for this contact. Named controls on the page:',
         [...new Set(names)].sort());
     } catch (e) { /* never let logging break a flow */ }
   }
 
-  function removeFromCadenceButton() {
-    const named = [];
+  // Every control on the page named for taking someone out of a cadence.
+  function removalControls() {
+    const found = [];
     for (const el of document.querySelectorAll('button,[role="button"],a[href]')) {
       // Cheap first. Resolving a proper accessible name for every control on a
       // Salesloft page, ten times a second for eight seconds, is not free — but
@@ -429,14 +430,95 @@
       if (!el.hasAttribute('aria-labelledby') && !/cadence/i.test(attrs + ' ' + (el.textContent || ''))) continue;
       if (!isShown(el) || el.disabled) continue;
       const name = accessibleName(el).replace(/\s+/g, ' ').trim();
-      if (REMOVE_FROM_CADENCE.test(name)) named.push({ el, name });
+      if (REMOVE_FROM_CADENCE.test(name)) found.push(el);
     }
-    if (!named.length) return null;
-    // Falling back to text content means an outer container holding the whole
-    // cadence panel can match as well as the button inside it. The tightest
-    // name is the control itself.
-    named.sort((a, b) => a.name.length - b.name.length);
-    return named[0].el;
+    // Falling back to text content means an outer container holding a control
+    // can match as well as the control inside it. The innermost is the control.
+    return found.filter((el) => !found.some((other) => other !== el && el.contains(other)));
+  }
+
+  // The name as a whole word or phrase, so "Eric Kersten" is not found inside
+  // "Erica Kerstenson".
+  function namePattern(name) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, 'iu');
+  }
+
+  // A task row is well under this; anything bigger is a region of the page,
+  // not a row. A backstop only: the landmarks below are the real boundary.
+  const ROW_TEXT_LIMIT = 800;
+
+  // What no queue row ever contains: the page's own heading, the logger, this
+  // extension's plate. Each one carries the contact's name, so a climb that
+  // reaches one has left every row behind and would find the name there
+  // instead — which is exactly how the only control on a page, belonging to
+  // someone else, would come to read as this person's.
+  function removalLandmarks() {
+    return [
+      window.slContactNameElement && window.slContactNameElement(document),
+      document.querySelector('[data-testid="popout-logger-container"]'),
+      document.getElementById('sl-hotkey-overlay'),
+    ].filter(Boolean);
+  }
+
+  // Is this control about the person named? Salesloft puts one of these on
+  // every row of the task queue, each for a different person, and they are
+  // identical — same icon, same name, same everything but the row around them.
+  // Taking the first one on the page is how "Task removed for <someone else>"
+  // happened. So a control counts only if the name turns up while climbing
+  // from it, before the climb reaches another removal control, a landmark, or
+  // anything row-sized no longer.
+  function removalIsFor(el, controls, pattern, landmarks) {
+    for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+      if (controls.some((other) => other !== el && node.contains(other))) return false;
+      if (landmarks.some((mark) => node.contains(mark))) return false;
+      if ((node.textContent || '').length > ROW_TEXT_LIMIT) return false;
+      if (pattern.test(spacedText(node))) return true;
+    }
+    return false;
+  }
+
+  // A row's text with its pieces kept apart. textContent runs adjacent
+  // elements together with no space — "Account-Based TargetingEric Kersten at
+  // Acme" — and a name glued to the word before it is not a whole word.
+  function spacedText(node) {
+    const parts = [];
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) parts.push(walker.currentNode.nodeValue);
+    return parts.join(' ');
+  }
+
+  // The one removal control for this person, or a reason there is not exactly
+  // one. Two is as much a stop as none: guessing between them is how the wrong
+  // person comes out of a cadence.
+  function removalFor(person) {
+    const controls = removalControls();
+    const pattern = namePattern(person);
+    const landmarks = removalLandmarks();
+    const mine = controls.filter((el) => removalIsFor(el, controls, pattern, landmarks));
+    if (mine.length === 1) return { el: mine[0] };
+    return { count: mine.length, total: controls.length };
+  }
+
+  // Waits for exactly one control for this person, and throws a sentence the
+  // status strip can carry when there is not.
+  async function findRemovalFor(person) {
+    let last = { count: 0, total: 0 };
+    const found = await waitFor(() => {
+      last = removalFor(person);
+      return (last.el || last.count > 1) ? last : null;
+    }, CONFIG.stepTimeout).catch(() => null);
+    if (found && found.el) return found.el;
+    // By this point nobody has been removed, but the rep has to finish by hand
+    // and nobody can see why. The names that *were* on the page go to the
+    // console, where the next report can pick them up.
+    dumpNames();
+    if (last.count > 1) {
+      throw new Error(`found ${last.count} Remove from cadence controls for ${person}, so none was clicked`);
+    }
+    throw new Error(last.total
+      ? `none of the ${last.total} Remove from cadence controls is beside ${person}'s name, so none was clicked`
+      : `could not find the Remove from cadence control for ${person}`);
   }
 
   // Salesloft asks before it removes someone. The dialog is not in the
@@ -547,6 +629,26 @@
     setBusy(true);
     const disposition = settings.notInServiceDisposition || 'Not in Service';
     try {
+      // Whose removal this is, settled before anything is touched. The queue
+      // beside a contact carries an identical remove control for every person
+      // in it, so without a name to hold each one against, "the" control is
+      // whichever comes first on the page, and that is someone else as often
+      // as not. Checked now, while nothing is ended or logged, so a page this
+      // cannot read stops the flow clean rather than halfway.
+      //
+      // Only on the contact's own page. Dialled from a list or a cadence, the
+      // heading is that page's name, not a person's, and a queue row that
+      // happens to mention it would read as theirs.
+      if (!onPersonPage()) {
+        throw new Error('Not in Service removes from a cadence only on the contact\'s own page, so nothing was logged or removed');
+      }
+      const person = window.slContactName ? window.slContactName(document) : '';
+      if (!person) throw new Error('could not tell whose page this is, so nothing was logged or removed');
+      setStatus(`Finding ${person} in the cadence…`);
+      await findRemovalFor(person).catch((err) => {
+        throw new Error(`${err.message}. Nothing was logged`);
+      });
+
       const endBtn = buttonByText('End Call');
       if (endBtn) {
         setStatus('Ending call…');
@@ -569,17 +671,11 @@
       realClick(logOnly);
       await sleep(CONFIG.autoAdvanceDelayMs);
 
-      setStatus('Removing from cadence…');
-      const remove = await waitFor(
-        removeFromCadenceButton, CONFIG.stepTimeout, 100, 'the Remove from cadence control'
-      ).catch((err) => {
-        // The call is logged by this point, so this is the expensive failure:
-        // the rep has to finish by hand and nobody can see why. Put the names
-        // that *were* on the page into the console, where the next report can
-        // pick them up.
-        dumpNames();
-        throw err;
-      });
+      // Found again rather than reused: logging re-renders the queue, and the
+      // rows can move under a reference taken before it. Held to the same rule
+      // — exactly one control, beside this person's name.
+      setStatus(`Removing ${person} from cadence…`);
+      const remove = await findRemovalFor(person);
       trace('remove from cadence', remove);
       // Snapshot first: only a dialog that was not already open can be this
       // removal's own.
@@ -587,7 +683,7 @@
       realClick(remove);
       await confirmCadenceRemoval(openDialogs);
 
-      setStatus(`Logged ${disposition} ✓, removed from cadence`, 'ok');
+      setStatus(`Logged ${disposition} ✓, ${person} removed from cadence`, 'ok');
     } catch (err) {
       setStatus(`Stopped: ${err.message}. Finish manually.`, 'err');
     } finally {
@@ -881,6 +977,18 @@
   // while a call is actually up: browsing a cadence gets nothing, calling in
   // one gets the buttons wherever it was started from.
   const LOGGER_DOM = '[data-testid="popout-logger-container"]';
+
+  // Strictly a contact's own page: the route or the person-detail marker, and
+  // never the logger popout, which is on screen wherever a call was dialled
+  // from. The plate may show on a list mid-call; a cadence removal may not.
+  function onPersonPage() {
+    try {
+      return !!((window.slIsContactUrl && window.slIsContactUrl(location.href)) ||
+        document.querySelector(CONTACT_DOM));
+    } catch (e) {
+      return false;
+    }
+  }
 
   function onContactPage() {
     if (window.slIsContactUrl && window.slIsContactUrl(location.href)) return true;

@@ -223,23 +223,7 @@
   // notices the rep has moved to the next person, so the same tags on a new
   // contact still raise a fresh alert.
   function contactName() {
-    const selectors = [
-      '[data-testid="person-details-name"]',
-      '[data-testid*="person-name" i]',
-      '[data-testid*="personName" i]',
-      'h1',
-      'h2',
-    ];
-    for (const sel of selectors) {
-      let el;
-      try { el = document.querySelector(sel); } catch (e) { continue; }
-      const text = norm(el && el.textContent);
-      if (!text || text.length > 60) continue;
-      // The page heading is a breadcrumb ("People / Peter Nidever") — keep the leaf.
-      const leaf = text.split('/').pop().trim();
-      return leaf || text;
-    }
-    return '';
+    return window.slContactName ? window.slContactName(document) : '';
   }
 
   const contactKey = () => `${location.pathname}${location.search}|${contactName()}`;
