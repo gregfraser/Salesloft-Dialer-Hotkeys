@@ -199,23 +199,71 @@
     );
   }
 
-  // Which list the toggle just opened. Downshift names it — `aria-controls`, or
-  // the `-menu` twin of the toggle's own `-toggle-button` id — and that is worth
-  // using, because the alternative is searching the page and the page is full of
-  // decoys. `opened` is whatever lists existed before the toggle was clicked, so
-  // a build that names nothing still resolves to the one that just appeared.
-  function dispositionList(toggle, opened) {
-    const named = toggle.getAttribute('aria-controls') || toggle.getAttribute('aria-owns');
-    if (named) {
-      const el = document.getElementById(named);
-      if (el && isShown(el)) return el;
+  // Every list that could be the one the toggle opened, best first. Downshift
+  // names it (`aria-controls` / `aria-owns`, on the toggle or on the input and
+  // root beside it, or the `-menu` twin of a `-toggle-button` / `-input` id),
+  // and that is worth using, because the alternative is searching the page and
+  // the page is full of decoys. After the named ones comes any list that is on
+  // screen now and was not before the click.
+  //
+  // `shownBefore` is the lists that were *on screen* before the click, not the
+  // ones that merely existed. Downshift keeps its menu in the DOM while closed
+  // (an empty listbox with no height), so recording every list ruled out the
+  // very one the toggle was about to open, and the flow took whatever other
+  // list React happened to re-render for the menu. That is the rep's
+  // `could not find "No Answer"` with the option plainly on screen.
+  function dispositionLists(toggle, shownBefore) {
+    const out = [];
+    const add = (el) => { if (el && !out.includes(el) && isShown(el)) out.push(el); };
+    const near = [toggle, toggle.closest('[role="combobox"],[aria-haspopup]'),
+      ...((toggle.closest('div') || toggle).querySelectorAll('input,[role="combobox"]'))];
+    for (const el of near) {
+      if (!el) continue;
+      for (const attr of ['aria-controls', 'aria-owns']) {
+        for (const id of (el.getAttribute(attr) || '').split(/\s+/)) {
+          if (id) add(document.getElementById(id));
+        }
+      }
+      if (el.id && /-(toggle-button|input)$/.test(el.id)) {
+        add(document.getElementById(el.id.replace(/-(toggle-button|input)$/, '-menu')));
+      }
     }
-    if (toggle.id && /-toggle-button$/.test(toggle.id)) {
-      const el = document.getElementById(toggle.id.replace(/-toggle-button$/, '-menu'));
-      if (el && isShown(el)) return el;
+    for (const el of document.querySelectorAll(OPEN_LISTS)) {
+      if (!shownBefore.has(el)) add(el);
     }
-    return [...document.querySelectorAll('[role="listbox"],[role="menu"],ul')]
-      .find((el) => !opened.has(el) && isShown(el)) || null;
+    return out;
+  }
+
+  // The option, looked for in each candidate list in turn. Re-resolved on every
+  // poll rather than settled once, so a menu React replaces as it renders is
+  // read in its current form, and a list that appeared alongside it cannot win
+  // just by being found first.
+  function dispositionOption(toggle, shownBefore, value) {
+    const want = value.toLowerCase();
+    for (const list of dispositionLists(toggle, shownBefore)) {
+      const option = [...list.querySelectorAll('[role="option"],li,[role="menuitem"]')].find(
+        (li) => isShown(li) && li.textContent.replace(/\s+/g, ' ').trim().toLowerCase() === want
+      );
+      if (option) return option;
+    }
+    return null;
+  }
+
+  // The status strip holds one sentence. This is what the next bug report needs:
+  // what the toggle said about itself and what each candidate list held.
+  function dumpDisposition(toggle, shownBefore) {
+    try {
+      const attrs = {};
+      for (const a of ['id', 'role', 'aria-controls', 'aria-owns', 'aria-haspopup', 'aria-expanded']) {
+        if (toggle.hasAttribute(a)) attrs[a] = toggle.getAttribute(a);
+      }
+      const lists = dispositionLists(toggle, shownBefore).map((l) => ({
+        tag: l.tagName, id: l.id, role: l.getAttribute('role'),
+        items: [...l.querySelectorAll('[role="option"],li,[role="menuitem"]')]
+          .slice(0, 12).map((li) => li.textContent.replace(/\s+/g, ' ').trim().slice(0, 40)),
+      }));
+      console.warn('[dialer] disposition option not found. Toggle:', attrs, 'Candidate lists:', lists);
+    } catch (e) { /* never let logging break a flow */ }
   }
 
   // What the control says it holds now. A combobox is either a button whose
@@ -242,16 +290,12 @@
     // the cadence sidebar are full of elements whose entire text is exactly the
     // disposition being looked for. The click landed on one of those, the field
     // stayed empty, and the flow carried on as though it had chosen.
-    const opened = new Set(document.querySelectorAll(OPEN_LISTS));
+    const shownBefore = new Set([...document.querySelectorAll(OPEN_LISTS)].filter(isShown));
     realClick(toggle);
-    const list = await waitFor(
-      () => dispositionList(toggle, opened), CONFIG.stepTimeout, 100, 'the Disposition list');
-    const option = await waitFor(() => {
-      const items = [...list.querySelectorAll('[role="option"],li,[role="menuitem"]')];
-      return items.find(
-        (li) => isShown(li) && li.textContent.replace(/\s+/g, ' ').trim().toLowerCase() === value.toLowerCase()
-      );
-    }, CONFIG.stepTimeout, 100, `"${value}" in the Disposition list`);
+    const option = await waitFor(
+      () => dispositionOption(toggle, shownBefore, value),
+      CONFIG.stepTimeout, 100, `"${value}" in the Disposition list`
+    ).catch((e) => { dumpDisposition(toggle, shownBefore); throw e; });
     trace('disposition option', option);
     realClick(option);
 

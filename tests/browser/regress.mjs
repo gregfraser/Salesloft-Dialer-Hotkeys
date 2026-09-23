@@ -46,6 +46,19 @@ console.log('\nThe two flows I did not touch');
   await p.close();
 }
 {
+  // The bug from the field: Downshift's menu is in the DOM before it opens, so
+  // counting it among the lists that were "already there" ruled out the very
+  // list the toggle opened.
+  const p = await open({ pageOverlay: true, notInService: true }, { inCall: true, downshiftMenu: true });
+  await act(p, 'kill-and-log');
+  await p.waitForTimeout(2000);
+  eq('kill-and-log finds the option in a menu that was always rendered', await acted(p),
+     ['End Call', 'disposition=No Answer', 'Log & Complete']);
+  const s = await statusText(p);
+  check('and says it logged', s.includes('Logged No Answer'), 'status was: ' + s);
+  await p.close();
+}
+{
   // "Call" has to be found by its exact visible text, and the mock's other
   // buttons must not satisfy that.
   const p = await open({ pageOverlay: true, notInService: true }, {});

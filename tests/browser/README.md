@@ -36,7 +36,7 @@ because it caught a real bug** that `node --test` and a screenshot both missed,
 which is the only reason to add another: `inCall`, `confirm`, `confirmButtons`,
 `noRemove`, `noMenuToggle`, `dispositions`, `dispositionSticks`,
 `dispositionPreset`, `removeLabel`, `nameFrom`, `decoys`, `decoyTexts`,
-`toast`, `confirmText`, `loggerIsDialog` and `listPage`.
+`toast`, `confirmText`, `loggerIsDialog`, `listPage` and `downshiftMenu`.
 
 The ones worth knowing about:
 
@@ -65,6 +65,13 @@ The ones worth knowing about:
 - `listPage` drops the contact marker, leaving only the logger popout — the
   state in which the plate used to appear beside a cadence's 170-row People
   list with nothing dialled.
+- `downshiftMenu` renders the disposition combobox the way Downshift does: the
+  menu is an empty listbox that stays in the DOM while closed, the toggle names
+  nothing, the options sit under "Frequently Used" / "A-Z" headers, and opening
+  it re-renders an unrelated list elsewhere. The flow counted every list that
+  *existed* before its click as not the one it opened, this menu included, so
+  it searched the unrelated list and stopped on `could not find "No Answer"`
+  with the option on screen.
 
 The mock should be as awkward as the real page, or it only tests the happy
 path.

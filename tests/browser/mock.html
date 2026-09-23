@@ -66,7 +66,50 @@ window.__buildSalesloft = (opts = {}) => {
   logger.appendChild(dispWrap);
 
   const OPTIONS = opts.dispositions || ['No Answer', 'Not in Service', 'Left Voicemail'];
-  toggle.addEventListener('click', () => {
+
+  // The combobox as Downshift really renders it. The menu element is always in
+  // the DOM: getMenuProps() has to land on something, so a closed menu is an
+  // empty listbox with no height rather than no listbox at all. The toggle names
+  // nothing, the options sit under "Frequently Used" / "A-Z" headers, and
+  // opening it re-renders an unrelated list elsewhere, as a React page will.
+  // The flow recorded every list on the page before its click and treated all
+  // of them as "not the one it opened", this one included, so it took the
+  // unrelated list for the menu and stopped on `could not find "No Answer"`
+  // with the option plainly on screen.
+  if (opts.downshiftMenu) {
+    toggle.removeAttribute('id');
+    toggle.removeAttribute('aria-controls');
+    const menu = document.createElement('ul');
+    menu.id = 'downshift-7-menu';
+    menu.setAttribute('role', 'listbox');
+    dispWrap.appendChild(menu);
+    const pick = (name) => {
+      note('disposition=' + name);
+      if (opts.dispositionSticks !== false) toggle.textContent = name;
+      menu.innerHTML = '';
+    };
+    toggle.addEventListener('click', () => {
+      if (menu.children.length) return;
+      const groups = [['Frequently Used', OPTIONS.slice(0, 2)], ['A-Z', OPTIONS]];
+      for (const [header, names] of groups) {
+        const h = document.createElement('li');
+        h.textContent = header;
+        menu.appendChild(h);
+        for (const name of names) {
+          const li = document.createElement('li');
+          li.setAttribute('role', 'option');
+          li.textContent = name;
+          li.addEventListener('click', () => pick(name));
+          menu.appendChild(li);
+        }
+      }
+      const other = document.createElement('ul');
+      const item = document.createElement('li');
+      item.textContent = 'Call 4';
+      other.appendChild(item);
+      app.insertBefore(other, app.firstChild);
+    });
+  } else toggle.addEventListener('click', () => {
     if (document.getElementById('disp-list')) return;
     const ul = document.createElement('ul');
     ul.id = 'disp-list';
