@@ -76,16 +76,36 @@ window.__buildSalesloft = (opts = {}) => {
   // of them as "not the one it opened", this one included, so it took the
   // unrelated list for the menu and stopped on `could not find "No Answer"`
   // with the option plainly on screen.
+  //
+  // The field is an input with the toggle beside it in a wrapper of its own,
+  // and picking a value swaps the chevron for a clear (×) button. So the
+  // toggle the flow clicked is detached by the time it reads the value back,
+  // and the value is in the input, not in any button's text. The read-back
+  // looked only at the toggle, saw nothing, and sat on `Setting "No Answer"…`
+  // with the field plainly reading "No Answer".
   if (opts.downshiftMenu) {
     toggle.removeAttribute('id');
     toggle.removeAttribute('aria-controls');
+    toggle.textContent = '▾';
+    const input = document.createElement('input');
+    input.placeholder = 'Disposition';
+    const toggleWrap = document.createElement('div');
+    dispInner.insertBefore(input, toggle);
+    dispInner.appendChild(toggleWrap);
+    toggleWrap.appendChild(toggle);
     const menu = document.createElement('ul');
     menu.id = 'downshift-7-menu';
     menu.setAttribute('role', 'listbox');
     dispWrap.appendChild(menu);
     const pick = (name) => {
       note('disposition=' + name);
-      if (opts.dispositionSticks !== false) toggle.textContent = name;
+      if (opts.dispositionSticks !== false) {
+        input.value = name;
+        const clear = document.createElement('button');
+        clear.setAttribute('aria-label', 'clear selection');
+        clear.textContent = '×';
+        toggle.replaceWith(clear);
+      }
       menu.innerHTML = '';
     };
     toggle.addEventListener('click', () => {

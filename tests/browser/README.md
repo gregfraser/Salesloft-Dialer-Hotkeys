@@ -72,6 +72,10 @@ The ones worth knowing about:
   *existed* before its click as not the one it opened, this menu included, so
   it searched the unrelated list and stopped on `could not find "No Answer"`
   with the option on screen.
+  The field is also an input with the toggle beside it, and picking a value
+  swaps the chevron for a clear (×) button. The read-back looked only at the
+  toggle it had clicked, which was detached by then, and sat on
+  `Setting "No Answer"…` with the field reading "No Answer".
 
 The mock should be as awkward as the real page, or it only tests the happy
 path.
