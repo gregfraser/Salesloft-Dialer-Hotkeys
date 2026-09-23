@@ -125,7 +125,7 @@ Four execution contexts in Chrome plus one Python process. Understanding any fea
 
 ### Settings
 
-`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `disposition`, `notInService`, `notInServiceDisposition`, `hotkeys`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `outputDeviceId`, `serverUrl`, `healthUrl`). With `transcription` on, auto-start is unconditional — it is a behaviour, not a setting. `transcription` also decides whether the on-page overlay carries the transcript pane, so toggling it rebuilds the overlay.
+`chrome.storage.sync` holds dialer settings (`floatingPanel`, `pageOverlay`, `compactBar`, `disposition`, `notInService`, `notInServiceDisposition`, `hotkeys`), contact-alert settings (`alertsEnabled`, `alertTags`, `alertStrict`) and transcription settings (`transcription`, `outputDeviceId`, `serverUrl`, `healthUrl`). With `transcription` on, auto-start is unconditional — it is a behaviour, not a setting. `transcription` also decides whether the on-page overlay carries the transcript pane, so toggling it rebuilds the overlay.
 
 **No transcript is ever downloaded automatically.** A cadence is dozens of dials and almost none of them are worth a file, so a save happens only from a click on a ↓ button. Both UIs enforce this; a "save it for them" convenience is the thing not to add back. Chrome independently forbids it on the page side anyway — a web page gets one uninvited download before Chrome starts asking the user's permission for the rest, so an automatic per-call save from `content.js` would put a permission bubble on the Salesloft page partway through a call block.
 
@@ -230,7 +230,8 @@ When Salesloft ships UI changes, these are what break.
 
 - `killAndLog` sets the disposition **before** clicking "Log & Complete". Any failed step throws, surfaces "Stopped: … Finish manually.", and leaves the call unlogged — never log with a wrong or missing disposition. `runNotInService` keeps the same rule and adds one: the cadence removal goes **last**, because a person removed from a cadence with no call logged against them is the worse half-state of the two.
 - **The third control arms before it fires, and that is its confirmation.** `not-in-service` is the only thing in this extension that takes a person out of a cadence, and undoing it means finding them and adding them back by hand. A modal is out (nothing here steals focus mid-call), so the control itself asks: one press turns it red and changes its label to "Remove from cadence?", a second within 3s commits, and the window lapses on its own. Both surfaces implement it, and both disarm when the overlay is replaced or the setting goes off — a press half-made against a control that is no longer there must not survive. **Whoever asked the question owns the answer**: the panel confirms on its own surface and sends `confirmed: true`, which the content script runs straight through, because arming a second time there made the panel's confirming press do nothing and put the real commit two presses later inside a 3s window. And arming never happens where it cannot be seen — with the on-page controls off there is no strip to turn red, so `notInService()` refuses rather than letting a second keypress remove someone with nothing having asked.
-- **It is off by default and it sits below the pair, never beside it.** Putting a third button in the row would take width from the two buttons a rep aims at all day; below, the pair keeps its exact 214×108 and the button column still ends on the same line as the transcript pane. Turning it on costs 34px of plate and nothing else. Its disposition is its own setting for the same reason `disposition` is one: it has to match Salesloft's dropdown text exactly.
+- **It is off by default and it shares the base row, never the pair's row.** Putting a third button beside the pair would take width from the two buttons a rep aims at all day. It sits on the row below them instead, next to the status — one 26px line spanning the whole plate. That row is what fixed the balance: the strip used to be 214 wide under a plate that is 278 or 552, so the corner beneath the transcript pane was bare. Its disposition is its own setting for the same reason `disposition` is one: it has to match Salesloft's dropdown text exactly. The strip has **two widths** and which one is in use follows the pane beside it — the full column at 552, its mark and key alone at 278 or 234, where a name will not fit next to a status line that has to hold "Stopped: …".
+- **`compactBar` is how the page controls are drawn, not whether.** `pageOverlay` decides if anything is on the page; `compactBar` decides whether that is the full plate or a 42px bar carrying the same status and the same two actions at 26px. The full plate is the default and stays it. The bar has no Not in Service strip — a control that takes someone out of a cadence does not belong on the surface a rep chose because they wanted the plate out of the way — and no transcript pane. It **stands down for the duration of a call**: `reportCallState()` rebuilds on the crossing into and out of `IN_CALL`, because mid-call is exactly when the large targets earn their size. That rebuild is the one place this plate changes size on its own, and it is the trade a rep accepts by choosing the mode rather than one forced on everyone.
 - A `busy` flag serializes flows; hotkeys and clicks are ignored while one runs.
 - In-page key bindings are suppressed while typing (`isTyping()`) — which is what makes a bare letter a usable binding at all — and ignore auto-repeat, so a held key cannot queue flows behind `busy`.
 - **The keys on the buttons are read back, never assumed.** The overlay and the panel print the rep's binding and whatever `chrome.commands.getAll()` reports, and print nothing for an action that has neither. Hard-coding `Ctrl⇧9` there is how the buttons came to claim a shortcut Chrome had left unassigned.
@@ -239,12 +240,14 @@ When Salesloft ships UI changes, these are what break.
   `chrome.storage.local` — local, never `sync`, because it is a position on this monitor — rubber-banded
   while dragging, carried to rest by a spring holding the release velocity, and re-clamped on resize so a
   smaller window can never strand it off screen. Everything the rep aims at is still a fixed size: the
-  button column 214px, the transcript pane 308px, both exactly `PANEL_HEIGHT`, so the two finish on the
-  same line and transcript lines scroll rather than push anything around. The status is a reserved
-  one-line strip **below** that row — a sentence reads better across the plate than down 214px — and it
-  ellipsises with the whole of a long "Stopped: …" in the tooltip, which is what stops it resizing
-  anything (`width:0;min-width:100%` keeps a long line from deciding the plate's width). With
-  transcription off the timer moves into the free end of that strip.
+  button column 214px, the transcript pane 308px, both exactly `PANEL_HEIGHT` (104), so the two finish on
+  the same line and transcript lines scroll rather than push anything around. The status shares the
+  **base row** with the Not in Service strip — a sentence reads better across the plate than down 214px —
+  and it ellipsises with the whole of a long "Stopped: …" in the tooltip, which is what stops it resizing
+  anything (`width:0;min-width:100%` on that row keeps a long line from deciding the plate's width). The
+  call timer and the line count live on that row too, in every state: they used to be drawn in the
+  transcript pane as well, and that duplication is the whole reason the collapsed pane needed 96px to say
+  what the line below it was already saying.
 - **The status strip is the one place two paths write, so the order between them is fixed.** The click
   path owns it — a flow's "Ending call…" and its "Stopped: … Finish manually." are the rep's only
   account of a call that may now be half-logged. The detection path adds `setCallLive()`: the dot goes
@@ -294,9 +297,11 @@ When Salesloft ships UI changes, these are what break.
   captured line is lost; capture itself is untouched. Collapsed, the header *is* the pane: the same parts
   turned through ninety degrees into 96px — exactly 3×24 buttons, two 6px gaps and 6px of padding either
   side — at the row's full `PANEL_HEIGHT`, with the timer enlarged because it is the only number left on
-  screen and a line count standing in for the reading that is not. It must never go to `height:auto`; that
-  left a header hanging at the top of a 108px row with bare plate under it, the one place on this plate
-  where a control did not end where its neighbour did. The design prototype draws the pane open only and
+  screen and a line count standing in for the reading that is not — **no**: collapsed it is a 34px rail,
+  one column of 24px controls with the light above them and no words at all, because the base row carries
+  the timer and the count. It must never go to `height:auto`; that left a header hanging at the top of the
+  row with bare plate under it, the one place on this plate where a control did not end where its
+  neighbour did. The design prototype draws the pane open only and
   collapses it to zero width, which would take the restore control with it; collapsing to the header is
   the smallest thing that keeps its shape without putting a control out of reach. The flag lives in
   `txView` rather than storage, so it survives an overlay rebuild (a settings toggle, a stale copy being

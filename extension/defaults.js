@@ -11,6 +11,12 @@
     // -- dialer (existing behaviour) --
     floatingPanel: false,
     pageOverlay: true,
+    // How the page controls are drawn, not whether. Off is the full plate,
+    // which is what a rep gets unless they ask otherwise; on is the 42px bar.
+    // It means nothing with pageOverlay off, and it stands down on its own
+    // while a call is up, because that is when the large targets earn their
+    // size.
+    compactBar: false,
     disposition: 'No Answer',
 
     // -- not in service --

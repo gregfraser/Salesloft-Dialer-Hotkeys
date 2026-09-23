@@ -28,7 +28,8 @@ async function open(settings, mockOpts) {
 const acted = (p) => p.evaluate(() => window.__acted);
 const statusText = (p) => p.evaluate(() => {
   const b = document.getElementById('sl-hotkey-overlay');
-  return b ? b.lastElementChild.querySelector('div').textContent : null;
+  const s = b && b.querySelector('.sl-status');
+  return s ? s.textContent : null;
 });
 const act = (p, action) => p.evaluate((a) =>
   window.__slOnMessage({ type: 'dialer-action', action: a }, null, () => {}), action);
@@ -130,6 +131,50 @@ console.log('\nWhere the plate is allowed to be');
   const p = await open({ pageOverlay: true, notInService: true }, {});
   check('a contact view still gets the plate with no call at all',
         (await p.$('#sl-hotkey-overlay')) !== null);
+  await p.close();
+}
+
+console.log('\nThe compact bar');
+const plate = (p) => p.evaluate(() => {
+  const b = document.getElementById('sl-hotkey-overlay');
+  if (!b) return null;
+  const r = b.getBoundingClientRect();
+  return { w: Math.round(r.width), h: Math.round(r.height) };
+});
+{
+  const p = await open({ pageOverlay: true, notInService: true }, {});
+  eq('the full plate is what you get by default', await plate(p), { w: 236, h: 160 });
+  check('and the third control is on it', (await p.$('#sl-hotkey-overlay .sl-second')) !== null);
+  await p.close();
+}
+{
+  const p = await open({ pageOverlay: true, compactBar: true, notInService: true }, {});
+  eq('compact is a 214 bar, the width of the column it replaces', await plate(p), { w: 214, h: 44 });
+  check('no strip on it — that control is not for this surface',
+        (await p.$('#sl-hotkey-overlay .sl-second')) === null);
+  check('but both actions are, and they still answer', (await p.$$('#sl-hotkey-overlay .sl-act')).length === 2);
+  await p.close();
+}
+{
+  const p = await open({ pageOverlay: true, compactBar: true, notInService: true }, {});
+  await p.evaluate(() => {
+    const el = document.createElement('button');
+    el.setAttribute('aria-label', 'End Call');
+    el.textContent = 'End Call';
+    document.getElementById('app').appendChild(el);
+  });
+  await p.waitForTimeout(900);
+  eq('a live call opens it to the full plate', await plate(p), { w: 236, h: 160 });
+  await p.evaluate(() => [...document.querySelectorAll('button')]
+    .find((b) => b.textContent === 'End Call').remove());
+  await p.waitForTimeout(900);
+  eq('and it closes again when the call ends', await plate(p), { w: 214, h: 44 });
+  await p.close();
+}
+{
+  const p = await open({ pageOverlay: false, compactBar: true }, {});
+  check('compact means nothing with the page controls off',
+        (await p.$('#sl-hotkey-overlay')) === null);
   await p.close();
 }
 

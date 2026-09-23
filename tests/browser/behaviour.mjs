@@ -41,7 +41,8 @@ const acted = (p) => p.evaluate(() => window.__acted);
 const status = (p) => p.textContent('#sl-hotkey-overlay [style*="text-overflow"]').catch(() => null);
 const statusText = (p) => p.evaluate(() => {
   const box = document.getElementById('sl-hotkey-overlay');
-  return box ? box.lastElementChild.querySelector('div').textContent : null;
+  const s = box && box.querySelector('.sl-status');
+  return s ? s.textContent : null;
 });
 
 // ---------------------------------------------------------------- the flow
@@ -308,10 +309,12 @@ console.log('\nThe transcript pane');
     const r = pane.getBoundingClientRect();
     return { w: Math.round(r.width), h: Math.round(r.height) };
   });
-  eq('open, the pane is 308 x 108', await paneBox(), { w: 308, h: 108 });
+  eq('open, the pane is 308 x 104', await paneBox(), { w: 308, h: 104 });
   await p.click('#sl-hotkey-overlay [aria-label="Hide transcript"]');
   await p.waitForTimeout(200);
-  eq('collapsed, it is 96 x 108 — never auto height', await paneBox(), { w: 96, h: 108 });
+  // A rail: one column of controls. The timer and the line count are on the
+  // base row now, so nothing in here needs width for a word.
+  eq('collapsed, it is a 34px rail at full height — never auto', await paneBox(), { w: 34, h: 104 });
   const reachable = await p.evaluate(() => ['Show transcript', 'Pause transcription', 'Save transcript as text']
     .map((t) => !!document.querySelector(`#sl-hotkey-overlay [aria-label="${t}"]`)));
   eq('and all three controls stay reachable', reachable, [true, true, true]);
@@ -330,7 +333,7 @@ console.log('\nThe transcript pane');
     return {
       header: !!header,
       headerColour: header ? getComputedStyle(header).color : null,
-      status: box.lastElementChild.querySelector('div').textContent,
+      status: box.querySelector('.sl-status').textContent,
       prompt: [...box.querySelectorAll('div')].some((d) => d.textContent.includes('with Salesloft in front')),
     };
   });

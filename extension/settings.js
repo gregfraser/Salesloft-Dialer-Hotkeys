@@ -10,6 +10,8 @@ const DEFAULTS = self.SL_DEFAULTS;
 const els = {
   floatingPanel: document.getElementById('floatingPanel'),
   pageOverlay: document.getElementById('pageOverlay'),
+  compactBar: document.getElementById('compactBar'),
+  compactGroup: document.getElementById('compact-group'),
   disposition: document.getElementById('disposition'),
   notInService: document.getElementById('notInService'),
   notInServiceDisposition: document.getElementById('notInServiceDisposition'),
@@ -34,6 +36,8 @@ const els = {
 chrome.storage.sync.get(DEFAULTS, (settings) => {
   els.floatingPanel.checked = settings.floatingPanel;
   els.pageOverlay.checked = settings.pageOverlay;
+  els.compactBar.checked = settings.compactBar;
+  syncCompactGroup();
   els.disposition.value = settings.disposition;
   els.notInService.checked = settings.notInService;
   els.notInServiceDisposition.value = settings.notInServiceDisposition;
@@ -82,6 +86,12 @@ function syncNotInServiceGroup() {
   const off = !els.notInService.checked;
   els.notInServiceGroup.classList.toggle('disabled-group', off);
   els.notInServiceKeys.classList.toggle('disabled-group', off);
+}
+
+// The compact bar is a way of drawing the on-page controls, so it means
+// nothing with those off and dims with them.
+function syncCompactGroup() {
+  els.compactGroup.classList.toggle('disabled-group', !els.pageOverlay.checked);
 }
 
 function syncTranscriptionGroup() {
@@ -242,7 +252,12 @@ els.floatingPanel.addEventListener('change', () => {
 });
 
 els.pageOverlay.addEventListener('change', () => {
+  syncCompactGroup();
   persist('pageOverlay', els.pageOverlay.checked);
+});
+
+els.compactBar.addEventListener('change', () => {
+  persist('compactBar', els.compactBar.checked);
 });
 
 els.notInService.addEventListener('change', () => {

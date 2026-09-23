@@ -49,6 +49,12 @@
       settings.pageOverlay = changes.pageOverlay.newValue;
       syncOverlay();
     }
+    // A different way of drawing the same controls, so the plate is rebuilt
+    // rather than restyled.
+    if (changes.compactBar) {
+      settings.compactBar = changes.compactBar.newValue;
+      syncOverlay(true);
+    }
     // Turning transcription on or off adds or removes the transcript pane, so
     // the overlay is rebuilt. Lines already on screen are carried across.
     if (changes.transcription) {
@@ -672,7 +678,7 @@
   // holding a permanently empty band.
   const CONTROLS_WIDTH = 214;   // the button column, unchanged whatever else is shown
   const TRANSCRIPT_WIDTH = 308;
-  const PANEL_HEIGHT = 108;     // the buttons and the pane: one row, one height
+  const PANEL_HEIGHT = 104;     // the buttons and the pane: one row, one height
   const BOX_PAD = 10;
   // Grouping is carried by space. Inside the button pair is 6 and the pane sits
   // 10 from them, so the two groups read as two. The stack — tag, row, status —
@@ -684,15 +690,23 @@
   // have (WCAG 2.2 target size, minimum); 21 was under it, and these three are
   // aimed at mid-call.
   const ICON = 24;
-  // Collapsed, the pane is exactly as wide as the three buttons it still has
-  // to hold: 3 × 24 + 2 × 6 between them + 6 of padding either side. Everything
-  // else in there — the light, its word, the timer, the line count — stacks
-  // into that width rather than setting it.
-  const PANE_MINI_WIDTH = 96;
+  // Collapsed, the pane is a rail: one column of 24px controls with the light
+  // above them, and nothing else. 24 + 4 of padding either side and there is
+  // no room for a word — which is the point, because the base row below it
+  // already carries the timer and the line count. A rail that repeated them
+  // was 96px wide for information that was on screen twice.
+  const PANE_MINI_WIDTH = 34;
   // The third control. Two thirds the height of a keycap row and a quarter of
   // the pair's, because it is the thing a rep reaches for once in a hundred
   // dials, not once in three.
   const SECONDARY_HEIGHT = 26;
+  // The strip is the whole button column when the transcript pane is open
+  // beside it, and its mark and key alone when the plate is narrow: at 278
+  // there is no room for a name, and the tooltip still carries it.
+  // 80, not 64: the mark is 13, the gap 6, and a real cap reads "Ctrl⇧7" at
+  // about 44. A box sized for a one-character cap clips the one Chrome
+  // actually assigns.
+  const NIS_TIGHT_WIDTH = 80;
   const HEADER_GAP = 6;         // inside the pane header
   // The status is one line, always, and reserved whether or not it has
   // anything to say — that is what stops a long "Stopped: …" from resizing the
@@ -744,7 +758,8 @@
   let alertDot = null;
   let alertText = null;
   let statusDot = null;
-  let timerEl = null;   // wherever the call timer currently lives
+  let timerEl = null;   // the call timer, on the base row
+  let linesEl = null;   // how many lines are waiting, while the pane is a rail
   let plateX = null;    // the drag springs, kept so a resize can nudge the plate
   let plateY = null;
   let plateResizeBound = false;
@@ -828,6 +843,7 @@
     overlayEl = null;
     statusEl = null;
     statusDot = null;
+    linesEl = null;
     alertEl = null;
     alertSlot = null;
     alertIn = null;
@@ -878,7 +894,7 @@
     alertEl.style.borderColor = `rgba(${rgb},.42)`;
     alertEl.style.color = theme.text;
     alertDot.style.background = theme.text;
-    alertIn.tune(0.44, 0.3);
+    alertIn.tune(0.26, 0.08);
     alertIn.to(1);
   }
   window.__slOnContactAlert = renderOverlayAlert;
@@ -1062,7 +1078,7 @@
     b.style.cssText = [
       'flex:1 1 0', 'min-width:0', 'height:100%', 'box-sizing:border-box',
       'display:flex', 'flex-direction:column', 'align-items:flex-start', 'justify-content:space-between',
-      'gap:8px', 'padding:11px 10px', 'border:none', 'border-radius:11px',
+      'gap:8px', 'padding:10px', 'border:none', 'border-radius:11px',
       'cursor:pointer', 'color:#fff', `background:${background}`,
       // The glow is the button's own colour thrown onto the plate under it, so
       // the two faces read as lit rather than pasted on.
@@ -1071,6 +1087,37 @@
     ].join(';');
     b.addEventListener('click', onClick);
     paintKeys(b, action);
+    return b;
+  }
+
+  // Compact is a way of drawing the page controls, not a fourth surface: the
+  // same two actions, the same status, the same keys, in a 42px bar instead of
+  // a 160px plate. It is off by default — the full plate is what a rep gets
+  // unless they ask otherwise — and it stands down the moment a call is up,
+  // because mid-call is exactly when the large targets earn their size.
+  const COMPACT_ACTION = 26;
+
+  function compactMode() {
+    return !!settings.compactBar && lastCallState !== 'IN_CALL' && !busy;
+  }
+
+  function miniAction(glyph, action, background, onClick) {
+    const b = document.createElement('button');
+    b.className = 'sl-act sl-mini';
+    b.type = 'button';
+    b.textContent = glyph;
+    b.style.cssText = [
+      `width:${COMPACT_ACTION}px`, `height:${COMPACT_ACTION}px`, 'flex:0 0 auto',
+      'display:flex', 'align-items:center', 'justify-content:center',
+      'border:none', 'border-radius:7px', 'cursor:pointer', 'color:#fff',
+      `background:${background}`, `box-shadow:${BUTTON_SHADOW}`,
+      `font-size:${TYPE.caption}px`, 'line-height:1', 'font-family:inherit', 'user-select:none',
+    ].join(';');
+    b.addEventListener('click', onClick);
+    // No keycap fits at 26px, so the key lives in the tooltip alone. paintKeys
+    // writes that tooltip whether or not there is a row to draw caps into.
+    paintKeys(b, action);
+    window.slPressable(b, () => !busy);
     return b;
   }
 
@@ -1097,15 +1144,27 @@
     window.slPressable(b, () => !busy);
 
     const wrap = document.createElement('div');
-    wrap.style.cssText = [
-      `width:${CONTROLS_WIDTH}px`, 'flex:0 0 auto', 'box-sizing:border-box', 'display:flex',
-    ].join(';');
+    wrap.style.cssText = ['flex:0 0 auto', 'box-sizing:border-box', 'display:flex'].join(';');
     wrap.appendChild(b);
 
     nis = { el: b, wrap, label: b.querySelector('.sl-second-label') };
+    renderSecondaryWidth();
     renderSecondary();
     paintKeys(b, 'not-in-service');
     return wrap;
+  }
+
+  // Two widths, and which one is in use follows the pane beside it: with the
+  // transcript open the plate is 552 and the strip is the whole button column;
+  // collapsed or with transcription off it is 278 or 234, and the name does not
+  // fit next to a status line that has to hold "Stopped: …". The mark and the
+  // key stay, so the control is still a control; the tooltip keeps the name.
+  function renderSecondaryWidth() {
+    if (!nis) return;
+    const wide = !!settings.transcription && !txView.minimized;
+    nis.wrap.style.width = `${wide ? CONTROLS_WIDTH : NIS_TIGHT_WIDTH}px`;
+    nis.el.style.justifyContent = wide ? '' : 'center';
+    nis.label.style.display = wide ? '' : 'none';
   }
 
   // Rest, and armed. Armed is the red the rest of the extension uses for a
@@ -1244,6 +1303,66 @@
     paint();
   }
 
+  // The dot, the line, the timer and the line count. One builder, because the
+  // full plate and the compact bar both show exactly this.
+  function buildStatusRow() {
+    const statusRow = document.createElement('div');
+    statusRow.style.cssText = [
+      'display:flex', 'align-items:center', 'gap:7px',
+      'flex:1 1 auto', 'min-width:0', 'height:100%',
+      'padding-inline-start:2px', 'box-sizing:border-box',
+    ].join(';');
+
+    statusDot = document.createElement('span');
+    statusDot.style.cssText =
+      `width:5px;height:5px;border-radius:50%;background:${FG_DIM};flex:0 0 auto`;
+
+    statusEl = document.createElement('div');
+    // Named, so nothing has to find it by its position in the box. It has
+    // moved twice now, and each time something that counted children broke.
+    statusEl.className = 'sl-status';
+    statusEl.style.cssText = [
+      'flex:1 1 auto', 'min-width:0',
+      `font-size:${TYPE.read}px`, 'letter-spacing:-.005em', `color:${FG}`,
+      // One line, always. The tooltip carries whatever does not fit.
+      'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
+    ].join(';');
+    statusEl.textContent = 'Ready';
+
+    statusRow.appendChild(statusDot);
+    statusRow.appendChild(statusEl);
+
+    // An overlay is not always built before the call it belongs to. So it opens
+    // on the state the page is actually in, set here rather than through
+    // setCallLive() because that one announces to the panel and a rebuild is
+    // not news.
+    if (lastCallState === 'IN_CALL') {
+      statusEl.textContent = 'Connected';
+      statusDot.style.background = CALL_LIVE;
+    }
+
+    // The timer lives here now whether or not there is a pane, and the line
+    // count joins it while the pane is collapsed. Both used to be drawn inside
+    // the pane as well, which is how a 96px rail came to be 96px: it was
+    // repeating what the line below it already said.
+    timerEl = document.createElement('span');
+    timerEl.style.cssText = [
+      'margin-inline-start:auto', `font-size:${TYPE.read}px`, 'font-variant-numeric:tabular-nums',
+      'letter-spacing:-.01em', `color:${FG_MUTED}`, 'flex:0 0 auto',
+    ].join(';');
+    timerEl.textContent = '00:00';
+    statusRow.appendChild(timerEl);
+
+    linesEl = document.createElement('span');
+    linesEl.style.cssText = [
+      `font-size:${TYPE.caption}px`, `color:${FG_MUTED}`, 'flex:0 0 auto',
+      'padding-inline-end:2px', 'display:none',
+    ].join(';');
+    statusRow.appendChild(linesEl);
+
+    return statusRow;
+  }
+
   function buildOverlay() {
     if (!document.body) return;
     // An overlay may already exist, left behind by a previous copy of this
@@ -1318,7 +1437,15 @@
     alertEl.appendChild(alertSource);
     alertSlot.appendChild(alertEl);
     box.appendChild(alertSlot);
-    alertIn = window.slSlot(alertSlot, { axis: 'col', gap: STACK_GAP, duration: 0.44, bounce: 0.3 });
+    alertIn = window.slSlot(alertSlot, { axis: 'col', gap: STACK_GAP, duration: 0.26, bounce: 0.08 });
+
+    // Compact: one 42px bar, and nothing else is built. The pane, the strip and
+    // the pair's large faces all belong to the full plate.
+    if (compactMode()) {
+      buildCompactRow(box);
+      finishOverlay(box);
+      return;
+    }
 
     const main = document.createElement('div');
     main.style.cssText = 'display:flex;align-items:stretch;gap:0;';
@@ -1351,68 +1478,59 @@
     if (hasTranscript) main.appendChild(buildTranscript());
     box.appendChild(main);
 
-    // Below the pair, not beside it. Putting it in the row would have taken
-    // width from the two buttons the rep actually aims at, or made the plate
-    // wider than the pane it sits next to; below, the pair keeps its exact
-    // 214×108 and the column still finishes on the same line as the transcript.
-    // The cost is 34px of plate — this strip and the gap above it — and only
-    // for a rep who turned it on.
-    if (settings.notInService) box.appendChild(buildSecondary());
-
-    // Under the whole box rather than inside the button column: a sentence
-    // reads better across the width than down 214px, and the row above keeps
-    // its full height instead of giving a third of it up to one word.
-    const statusRow = document.createElement('div');
-    statusRow.style.cssText = [
-      'display:flex', 'align-items:center', 'gap:7px',
-      `height:${STATUS_HEIGHT}px`, 'flex:0 0 auto',
-      'padding-inline-start:2px', 'box-sizing:border-box',
+    // One row under the pair, carrying both the third control and the status.
+    // They used to be two stacked rows, and the strip was 214 wide inside a
+    // plate that is 278 or 552 — so the corner under the transcript pane was
+    // bare, which is what read as unfinished. Sharing the line fills that
+    // corner and gives back 26px of plate at the same time.
+    const baseRow = document.createElement('div');
+    baseRow.style.cssText = [
+      'display:flex', 'align-items:center', `gap:${STACK_GAP}px`,
+      `height:${SECONDARY_HEIGHT}px`, 'flex:0 0 auto', 'box-sizing:border-box',
       // Takes the box's width without setting it: "Stopped: Timed out waiting
       // for element." must not be what decides how wide the plate is.
       'width:0', 'min-width:100%',
     ].join(';');
+    if (settings.notInService) baseRow.appendChild(buildSecondary());
 
-    statusDot = document.createElement('span');
-    statusDot.style.cssText =
-      `width:5px;height:5px;border-radius:50%;background:${FG_DIM};flex:0 0 auto`;
+    baseRow.appendChild(buildStatusRow());
+    box.appendChild(baseRow);
+    finishOverlay(box);
+  }
 
-    statusEl = document.createElement('div');
-    statusEl.style.cssText = [
-      'flex:1 1 auto', 'min-width:0',
-      `font-size:${TYPE.read}px`, 'letter-spacing:-.005em', `color:${FG}`,
-      // One line, always. The tooltip carries whatever does not fit.
-      'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
+  // The compact bar: the status the full plate shows, and the same two actions
+  // at 26px. No strip — a control that removes someone from a cadence does not
+  // belong on the surface a rep chose because they wanted the plate out of the
+  // way — and no pane, which is what the panel and the full plate are for.
+  function buildCompactRow(box) {
+    box.style.padding = '8px';
+    // The same width as the button column it stands in for, so switching modes
+    // moves the plate's contents and not its left edge. Sized by content it
+    // came out at 103px, which reads as a stray chip rather than the controls.
+    box.style.width = `${CONTROLS_WIDTH}px`;
+    box.style.boxSizing = 'border-box';
+    const row = document.createElement('div');
+    row.style.cssText = [
+      'display:flex', 'align-items:center', 'gap:8px',
+      `height:${COMPACT_ACTION}px`, 'flex:0 0 auto', 'box-sizing:border-box',
+      'width:0', 'min-width:100%',
     ].join(';');
-    statusEl.textContent = 'Ready';
 
-    statusRow.appendChild(statusDot);
-    statusRow.appendChild(statusEl);
+    row.appendChild(buildStatusRow());
 
-    // An overlay is not always built before the call it belongs to: toggling
-    // transcription rebuilds it, and a stale copy left by an extension reload
-    // is replaced the next time the page re-renders. So it opens on the state
-    // the page is actually in. Set here rather than through setCallLive()
-    // because that one announces to the panel, and a rebuild is not news.
-    if (lastCallState === 'IN_CALL') {
-      statusEl.textContent = 'Connected';
-      statusDot.style.background = CALL_LIVE;
-    }
+    const kill = miniAction('✕', 'kill-and-log',
+      'linear-gradient(180deg,#d9503f 0%,#a02c1d 100%)', killAndLog);
+    const call = miniAction('▶', 'start-call',
+      'linear-gradient(180deg,#2aa55c 0%,#13623a 100%)', startCall);
+    row.appendChild(kill);
+    row.appendChild(call);
+    // Same shape as the full plate's, so renderKeycaps() and the busy class
+    // find what they expect on either surface.
+    ctl = { kill, call, row };
+    box.appendChild(row);
+  }
 
-    // With no pane there is nowhere else for the call timer to live, so it
-    // takes the free end of the status line, opposite the word the dot and
-    // setCallLive() put at the other end.
-    if (!hasTranscript) {
-      timerEl = document.createElement('span');
-      timerEl.style.cssText = [
-        'margin-inline-start:auto', `font-size:${TYPE.read}px`, 'font-variant-numeric:tabular-nums',
-        'letter-spacing:-.01em', `color:${FG_MUTED}`, 'padding-inline-end:2px', 'flex:0 0 auto',
-      ].join(';');
-      timerEl.textContent = '00:00';
-      statusRow.appendChild(timerEl);
-    }
-
-    box.appendChild(statusRow);
-
+  function finishOverlay(box) {
     document.body.appendChild(box);
     overlayEl = box;
     makeDraggable(box);
@@ -1471,11 +1589,16 @@
   // How many lines are waiting behind a collapsed pane. Only ever read there,
   // so it is the counter that replaces the reading rather than a second copy
   // of it.
+  // Shown on the base row while the pane is a rail, because that is when the
+  // reading it stands in for is not on screen.
   function renderLineCount() {
-    if (!tx) return;
+    if (!linesEl) return;
+    const show = !!tx && txView.minimized;
+    linesEl.style.display = show ? '' : 'none';
+    if (!show) return;
     const count = txView.entries.length;
-    tx.lines.textContent = count === 1 ? '1 line' : `${count} lines`;
-    tx.lines.style.color = count ? FG_MUTED : FG_DIM;
+    linesEl.textContent = count === 1 ? '1 line' : `${count} lines`;
+    linesEl.style.color = count ? FG_MUTED : FG_DIM;
   }
 
   // The prompt owns what the pane's body shows, because the two states it
@@ -1528,28 +1651,23 @@
     tx.pane.style.height = `${PANEL_HEIGHT}px`;
 
     // Minimising takes the reading away, not the controls. Open, the header is
-    // a strip across the top of the pane; collapsed, it *is* the pane — the
-    // same parts turned through ninety degrees, so the light and its word, the
-    // timer at a size worth reading across a desk, the count of what is waiting
-    // and all three buttons stay exactly where a hand can find them.
+    // a strip across the top of the pane; collapsed, the pane becomes a rail —
+    // the light above the same three buttons, in a column 34px wide. Nothing
+    // else goes in there: the timer and the line count moved to the base row,
+    // and a rail that repeated them needed 96px to say what was already on
+    // screen one line below.
     tx.bar.style.flexDirection = hidden ? 'column' : 'row';
-    tx.bar.style.gap = hidden ? '4px' : `${HEADER_GAP}px`;
-    tx.bar.style.padding = hidden ? '7px 6px 6px' : '5px 7px';
+    tx.bar.style.justifyContent = hidden ? 'space-between' : '';
+    tx.bar.style.gap = hidden ? '0' : `${HEADER_GAP}px`;
+    tx.bar.style.padding = hidden ? '5px 4px' : '5px 7px';
     tx.bar.style.background = hidden ? 'transparent' : 'rgba(255,255,255,.035)';
     tx.bar.style.borderBottom = hidden ? 'none' : '1px solid rgba(255,255,255,.05)';
     tx.bar.style.flex = hidden ? '1 1 auto' : '0 0 auto';
-    tx.meta.style.flexDirection = hidden ? 'column' : 'row';
-    tx.meta.style.gap = hidden ? '4px' : `${HEADER_GAP}px`;
-    tx.meta.style.alignSelf = hidden ? 'stretch' : 'auto';
-    tx.light.style.alignSelf = hidden ? 'stretch' : 'auto';
-    // The timer is the one thing that changes size between the two: in the
-    // header it sits beside a word, and collapsed it is the largest thing in a
-    // 96px pane because it is the only number still on screen.
-    tx.timer.style.fontSize = hidden ? '18px' : `${TYPE.caption}px`;
-    tx.timer.style.fontWeight = hidden ? '600' : '400';
-    tx.timer.style.color = hidden ? FG : FG_MUTED;
-    tx.timer.style.marginInlineStart = hidden ? '0' : '2px';
-    tx.lines.style.display = hidden ? '' : 'none';
+    // The word goes with the width. The light stays, because it is the one
+    // thing the rail has to say, and its colour says it without a word.
+    tx.connection.style.display = hidden ? 'none' : '';
+    tx.controls.style.flexDirection = hidden ? 'column' : 'row';
+    tx.controls.style.gap = hidden ? '4px' : `${HEADER_GAP}px`;
 
     tx.toggle.innerHTML = hidden ? window.SL_ICONS.expand : window.SL_ICONS.collapse;
     tx.toggle.title = hidden ? 'Show transcript' : 'Hide transcript';
@@ -1558,6 +1676,7 @@
 
     renderLineCount();
     renderArmPrompt();
+    renderSecondaryWidth();
     if (hidden) return;
     // A hidden list has no measurable height, so anything that arrived while it
     // was away leaves the view stale. Come back at the newest line.
@@ -1620,27 +1739,9 @@
     ].join(';');
     connection.textContent = 'OFFLINE';
 
-    const timer = document.createElement('span');
-    timer.style.cssText = [
-      `font-size:${TYPE.caption}px`, 'font-variant-numeric:tabular-nums', `color:${FG_MUTED}`,
-      'margin-inline-start:2px', 'flex:0 0 auto', 'letter-spacing:-.012em', 'line-height:1.1',
-    ].join(';');
-    timer.textContent = '00:00';
-    timerEl = timer;
-
-    // Only ever on screen collapsed, where the list is not: it is the one thing
-    // the reading was saying that the header cannot otherwise say.
-    const lines = document.createElement('span');
-    lines.style.cssText = [
-      `font-size:${TYPE.overline}px`, `color:${FG_MUTED}`, 'line-height:1',
-      'flex:0 0 auto', 'display:none', 'white-space:nowrap',
-    ].join(';');
-
     light.appendChild(dot);
     light.appendChild(connection);
     meta.appendChild(light);
-    meta.appendChild(timer);
-    meta.appendChild(lines);
 
     // Holds the two groups apart on either axis, so one rule covers both the
     // header's left/right split and the collapsed pane's top/bottom one.
@@ -1753,7 +1854,7 @@
     for (const b of [toggle, pause, save]) window.slPressable(b);
 
     tx = {
-      pane, list, empty, bar, meta, light, dot, connection, timer, lines,
+      pane, list, empty, bar, meta, light, dot, connection, controls,
       hint, toggle, pause, save,
       prompt, promptLead, promptKey, promptTail,
     };
@@ -2057,8 +2158,13 @@
     // DOM change degrades to "no transcription", never to a thrown error.
     const result = detector.detectState(detector.liveOptions(document));
     if (result.state === lastCallState) return;
+    const wasCompact = compactMode();
     lastCallState = result.state;
     safeSend({ type: 'call-state', state: result.state, tier: result.tier });
+    // The compact bar opens to the full plate for the duration of a call and
+    // closes again after. Only that crossing rebuilds — every other state
+    // change leaves the surface alone.
+    if (settings.compactBar && wasCompact !== compactMode()) syncOverlay(true);
     setCallLive(result.state === 'IN_CALL');
 
     // The transcript pane follows the call it is transcribing. This is still
