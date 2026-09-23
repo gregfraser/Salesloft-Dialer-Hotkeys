@@ -12,19 +12,7 @@ Current version: **1.5**
 
 ---
 
-## Quick start
-
-| | Do this | Takes |
-|---|---|---|
-| **1** | [Install the extension](#install) | 2 minutes, once |
-| **2** | [Make your calls](#make-calls): <kbd>→</kbd> to call, <kbd>←</kbd> to log No Answer | every call |
-| **3** | Optional: [change your keys](#change-your-keys), [turn on Not in Service](#not-in-service-optional), [add live transcription](#live-transcription-optional) | whenever you like |
-
----
-
 ## Install
-
-You only do this once. The extension isn't in the Chrome Web Store, so you load it into Chrome yourself.
 
 1. **Download it.** Click the green **Code** button at the top of this page, then **Download ZIP**.
 2. **Unzip it.** On Windows, right-click the file and choose **Extract All**. On a Mac, double-click it.
