@@ -29,7 +29,7 @@ python -m pytest tests/                        # 93 tests: VAD, queue, protocol,
 python -m pytest tests/test_vad_endpointing.py # a single file
 python -m pytest tests/ -k merges -q            # a single test by name
 node --test tests/test_salesloft_detection.js  # DOM detection (21)
-node --test tests/test_hotkeys.js              # key bindings: record, match, label (22)
+node --test tests/test_hotkeys.js              # key bindings: record, match, label (23)
 node --test tests/test_pcm_worklet.js          # audio downsampling (14)
 node --test tests/test_transcript_format.js    # shared transcript formatting (10)
 node --test tests/test_contact_page.js         # which routes are a contact (8)
@@ -45,15 +45,18 @@ and git ignores whatever npm writes in that directory):
 
 ```bash
 cd tests/browser && npm install playwright && npx playwright install chromium
-node behaviour.mjs   # the Not in Service flow, the collapsed pane, the not-armed state (42)
-node regress.mjs     # kill-and-log, start-call, and toggling a setting live (10)
+node behaviour.mjs   # the Not in Service flow, the pane, the not-armed state (56)
+node regress.mjs     # the two older flows, the plate's geometry, the compact bar (24)
 ```
 
 `mock.html` is a Salesloft-shaped page built from structure and accessible
 names only, never a generated class — the same rule `content.js` follows. Make
-it as awkward as the real page: its `confirm` dialog is `position:fixed` and
-its `loggerIsDialog` option gives the popout `role="dialog"`, because each of
-those caught a bug that the unit tests and a screenshot both missed. See
+it as awkward as the real page — every option on `__buildSalesloft()` exists
+because it caught a bug that the unit tests and a screenshot both missed: the
+`confirm` dialog is `position:fixed`, `loggerIsDialog` gives the popout
+`role="dialog"`, `decoys` fills the feed with pills whose entire text is the
+disposition being looked for, `nameFrom` moves the cadence control's accessible
+name between four places, and `listPage` drops the contact marker. See
 `tests/browser/README.md`.
 
 The Python tests need only `numpy pytest pyyaml fastapi httpx`. faster-whisper, torch and Silero are imported lazily inside methods precisely so the whole suite runs without them; keep it that way when adding code. `tests/conftest.py` puts `server/` on the path because the service modules import each other by bare name (they run package-less under uvicorn).
@@ -113,7 +116,7 @@ Manual, against the live Salesloft app:
 Four execution contexts in Chrome plus one Python process. Understanding any feature means tracing it across several. `docs/architecture.md` has the full diagram and rationale.
 
 - **`background.js`** (service worker) — the relay and the owner of transcription state (`IDLE → STARTING → TRANSCRIBING → FINALIZING`, plus first-class `DEGRADED`). Finds the most-recently-accessed Salesloft tab, forwards dialer actions, and on failure injects the content scripts via `chrome.scripting` and retries once. Owns the panel window (id in `chrome.storage.session`, so it survives worker sleep), the offscreen document lifecycle, and capture arming.
-- **`content.js`** — runs only on `https://app.salesloft.com/*`, and renders its overlay only on a contact's page (`syncOverlay()`); performs the DOM automation, renders the optional overlay (buttons, contact-alert line, status, and — when transcription is on — the live transcript pane), handles the in-page bindings (← and → by default). Guards double-injection with `window.__slHotkeysLoaded`.
+- **`content.js`** — runs only on `https://app.salesloft.com/*`, and renders its overlay only on a contact's page (`syncOverlay()`); performs the DOM automation, renders the optional overlay (buttons, contact-alert line, status, and — when transcription is on — the live transcript pane), handles the in-page bindings (←, → and ↑ by default). Guards double-injection with `window.__slHotkeysLoaded`.
 - **Content-script order in `manifest.json` is load-bearing**: `defaults.js`, `spring.js`, `call-detect.js`, `content.js`, `alerts.js`. All five share one isolated world and talk through globals, so `content.js` needs the defaults, the springs and the detector already defined, and `alerts.js` runs last because it calls the `window.__slOnContactAlert` hook that `content.js` registers. `background.js` recovers a failed send by injecting a copy of that list via `chrome.scripting.executeScript` (`files:` in `sendToSalesloft`), and the two lists have to be kept identical by hand — the fallback used to be missing `spring.js`, which made `content.js` throw on `window.slSpring` whenever it was injected that way.
 - **Orphaned content scripts are a normal state.** Reloading or updating the extension leaves the old content scripts running in the page with `chrome.runtime` gone — accessing it throws. Every `chrome.*` send from a content script goes through a guard (`safeSend()` in `content.js`, try/catch in `alerts.js`) so the DOM flows still complete from a stale script, and `buildOverlay()` always **replaces** an existing overlay rather than keeping it, because a leftover one is wired to the dead context — `syncOverlay()` keeps that true by treating an overlay it did not build as missing. Preserve both patterns in new content-script code.
 - **`call-detect.js`** — call-state detection, **observe only**. Takes its DOM access as injected functions (`elements`, `isVisible`) so it is testable without a DOM.
@@ -295,16 +298,15 @@ When Salesloft ships UI changes, these are what break.
   sliver, and `letter-spacing` applies after the last character too, so a one-character cap was pushed
   left of its own middle.
 - **Minimising hides the reading, not the transcript.** The old rail beside the pane is gone — its
-  controls now live in the pane's own header — so minimising collapses the pane onto that header rather
-  than away entirely, and the light, the timer, the toggle, pause and save all stay reachable while no
-  captured line is lost; capture itself is untouched. Collapsed, the header *is* the pane: the same parts
-  turned through ninety degrees into 96px — exactly 3×24 buttons, two 6px gaps and 6px of padding either
-  side — at the row's full `PANEL_HEIGHT`, with the timer enlarged because it is the only number left on
-  screen and a line count standing in for the reading that is not — **no**: collapsed it is a 34px rail,
-  one column of 24px controls with the light above them and no words at all, because the base row carries
-  the timer and the count. It must never go to `height:auto`; that left a header hanging at the top of the
-  row with bare plate under it, the one place on this plate where a control did not end where its
-  neighbour did. The design prototype draws the pane open only and
+  controls now live in the pane's own header — so minimising collapses the pane onto a rail rather than
+  away entirely, and the light, the toggle, pause and save all stay reachable while no captured line is
+  lost; capture itself is untouched. Collapsed it is **34px**: one column of 24px controls with the light
+  above them and no words at all, at the row's full `PANEL_HEIGHT`. It could shrink that far only because
+  the timer and the line count moved to the base row — drawn in both places, they were what kept an
+  earlier 96px version that wide, saying on the plate what the line below it already said. It must never
+  go to `height:auto`; that left a header hanging at the top of the row with bare plate under it, the one
+  place on this plate where a control did not end where its neighbour did. The design prototype draws the
+  pane open only and
   collapses it to zero width, which would take the restore control with it; collapsing to the header is
   the smallest thing that keeps its shape without putting a control out of reach. The flag lives in
   `txView` rather than storage, so it survives an overlay rebuild (a settings toggle, a stale copy being

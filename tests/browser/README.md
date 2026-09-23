@@ -31,12 +31,14 @@ accessible names only** — never a generated `styled-components` class — whic
 is the same rule `content.js` follows, so a test passing here means the
 selectors are anchored to something Salesloft is unlikely to move.
 
-`window.__buildSalesloft(opts)` rebuilds it, and the options are the cases
-worth having: `inCall`, `confirm`, `confirmButtons`, `noRemove`,
-`noMenuToggle`, `dispositions`, `removeLabel`, and `loggerIsDialog`.
+`window.__buildSalesloft(opts)` rebuilds it. **Every option on it exists
+because it caught a real bug** that `node --test` and a screenshot both missed,
+which is the only reason to add another: `inCall`, `confirm`, `confirmButtons`,
+`noRemove`, `noMenuToggle`, `dispositions`, `dispositionSticks`,
+`dispositionPreset`, `removeLabel`, `nameFrom`, `decoys`, `decoyTexts`,
+`toast`, `confirmText`, `loggerIsDialog` and `listPage`.
 
-Two of those options exist because they each caught a real bug that
-`node --test` and a screenshot both missed:
+The ones worth knowing about:
 
 - The confirmation dialog is **`position: fixed`**, like every real modal.
   `offsetParent` is null for a fixed element, so a check written as
@@ -47,9 +49,25 @@ Two of those options exist because they each caught a real bug that
   really has. A document-wide `[role="dialog"]` lookup matched the popout the
   flow had just been driving, so a removal that *had* succeeded was reported as
   "Stopped: … Finish manually."
+- `decoys` fills the activity feed with list items whose **entire text is the
+  disposition being looked for**, which is what a contact logged "Not in
+  Service" a dozen times really looks like. A page-wide `ul li` search clicked
+  one of those instead of the dropdown option, and the call logged with the
+  field still empty. Against the code that shipped, this prints
+  `DECOY CLICKED`.
+- `nameFrom` moves the cadence control's accessible name between `aria-label`,
+  `aria-labelledby`, the `title` attribute and the `<title>` inside its SVG.
+  Salesloft uses the last of those, and reading only the attribute meant the
+  flow logged the call and then timed out looking for a control that was there
+  all along.
+- `toast` throws an unrelated notification carrying a dialog role right when
+  the confirmation would appear, because Salesloft does.
+- `listPage` drops the contact marker, leaving only the logger popout — the
+  state in which the plate used to appear beside a cadence's 170-row People
+  list with nothing dialled.
 
-Keep both in mind when adding a case: the mock should be as awkward as the real
-page, or it only tests the happy path.
+The mock should be as awkward as the real page, or it only tests the happy
+path.
 
 ## What is still not covered
 
