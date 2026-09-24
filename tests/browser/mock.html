@@ -186,10 +186,12 @@ window.__buildSalesloft = (opts = {}) => {
 
   // Whose page this is. Salesloft's heading is a breadcrumb.
   const PERSON = opts.person || 'Eric Kersten';
+  document.title = 'mock salesloft';
   if (!opts.listPage && !opts.noHeading) {
     const h1 = document.createElement('h1');
     h1.textContent = 'People / ' + PERSON;
     app.insertBefore(h1, app.firstChild);
+    document.title = PERSON + ' | People | Salesloft';
   }
 
   // The cadence control lives on a row of the task queue beside the contact,
@@ -225,11 +227,28 @@ window.__buildSalesloft = (opts = {}) => {
   };
   const queue = document.createElement('div');
   app.appendChild(queue);
+  // `hoverReveal` is how the real queue draws it: a row's remove control
+  // exists only while the mouse is over that row. So with the rep's pointer
+  // resting on someone else's row (`hovered`), theirs was the only control on
+  // the page, and the first-on-the-page lookup removed them. The contact's own
+  // row had none until something hovered it.
   const addRow = (who, onClick) => {
     const row = document.createElement('div');
     const wrap = document.createElement('div');
     const inner = document.createElement('div');
-    inner.appendChild(makeRemove(onClick));
+    if (opts.hoverReveal) {
+      let shown = null;
+      const show = () => { if (!shown) { shown = makeRemove(onClick); inner.appendChild(shown); } };
+      const hide = () => { if (shown) { shown.remove(); shown = null; } };
+      // `noRevealFor` names rows that never draw their control, however they
+      // are hovered: the contact's row with nothing on it, beside someone
+      // else's that has one, is the page a climb to the whole queue got wrong.
+      if (!(opts.noRevealFor || []).includes(who)) row.addEventListener('mouseover', show);
+      row.addEventListener('mouseout', (e) => { if (!row.contains(e.relatedTarget)) hide(); });
+      if (opts.hovered === who) show();
+    } else {
+      inner.appendChild(makeRemove(onClick));
+    }
     wrap.appendChild(inner);
     row.appendChild(wrap);
     const text = document.createElement('div');

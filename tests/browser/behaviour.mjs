@@ -254,6 +254,40 @@ console.log('\nWhose control it is');
   await p.close();
 }
 {
+  // The queue as it really is: a row's remove control exists only while the
+  // mouse is over that row, and the rep's pointer was resting on someone
+  // else's. Theirs was then the only control on the page.
+  const p = await open(ON, { hoverReveal: true, queue: ['Joshua Tan'], queueAfter: ['Paul Rohlwing'], hovered: 'Joshua Tan' });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(5000);
+  const a = await acted(p);
+  check('with the pointer on someone else\'s row, they are not removed', !a.some((x) => x.startsWith('REMOVED WRONG')), a.join(' | '));
+  check('the contact\'s own row is hovered and their control used', a.includes('remove from cadence'),
+        a.join(' | ') + ' / ' + (await statusText(p)));
+  await p.close();
+}
+{
+  const p = await open(ON, { hoverReveal: true, queue: ['Joshua Tan'] });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(5000);
+  const a = await acted(p);
+  check('with nothing hovered, the contact\'s row is revealed and used',
+        a.includes('remove from cadence') && !a.some((x) => x.startsWith('REMOVED WRONG')),
+        a.join(' | ') + ' / ' + (await statusText(p)));
+  await p.close();
+}
+{
+  // The hole in the rule before this one: the only control on the page is
+  // someone else's, the contact's row sits in the same queue with none, and a
+  // climb that stopped only at another control reached the queue, found the
+  // contact's name there, and took the other person's control for theirs.
+  const p = await open(ON, { hoverReveal: true, queue: ['Joshua Tan'], hovered: 'Joshua Tan',
+                             noRevealFor: ['Eric Kersten'] });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(11000);
+  const s = await statusText(p);
+  eq('a control in a queue that also holds the contact\'s row is still not theirs', await acted(p), []);
+  check('and the flow stops before logging', s.startsWith('Stopped:') && s.includes('Nothing was logged'), 'status was: ' + s);
+  await p.close();
+}
+{
   // Two controls beside this person's name: guessing between them is still a
   // guess, so neither is clicked.
   const p = await open(ON, { queueAfter: ['Eric Kersten'] });

@@ -37,7 +37,8 @@ which is the only reason to add another: `inCall`, `confirm`, `confirmButtons`,
 `noRemove`, `noMenuToggle`, `dispositions`, `dispositionSticks`,
 `dispositionPreset`, `removeLabel`, `nameFrom`, `decoys`, `decoyTexts`,
 `toast`, `confirmText`, `loggerIsDialog`, `listPage`, `downshiftMenu`,
-`queue`, `queueAfter`, `reorderOnLog`, `person` and `noHeading`.
+`queue`, `queueAfter`, `reorderOnLog`, `person`, `noHeading`, `hoverReveal`,
+`hovered` and `noRevealFor`.
 
 The ones worth knowing about:
 
@@ -86,6 +87,13 @@ The ones worth knowing about:
   someone else's control on the page, the case where a climb reaching the
   heading would have read their control as the contact's. `person` names the
   contact in the `People / …` heading, and `noHeading` drops it.
+- `hoverReveal` is how the real queue draws that control: only on the row the
+  mouse is over. `hovered` puts the rep's pointer on someone else's row, which
+  made theirs the only control on the page; `noRevealFor` keeps the contact's
+  own row empty however it is hovered. That last one is the case a looser rule
+  (climb until another control) got wrong after it had been merged: it climbed
+  from the other person's control to the whole queue, found the contact's row
+  there, and removed the other person.
 
 The mock should be as awkward as the real page, or it only tests the happy
 path.

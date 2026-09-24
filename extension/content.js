@@ -428,7 +428,10 @@
       // entirely, and almost nothing uses it.
       const attrs = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`;
       if (!el.hasAttribute('aria-labelledby') && !/cadence/i.test(attrs + ' ' + (el.textContent || ''))) continue;
-      if (!isShown(el) || el.disabled) continue;
+      // Not filtered on being visible: the queue draws a row's control only
+      // while that row is hovered, and a control the rep cannot see is still
+      // one this flow must account for before it clicks any of them.
+      if (el.disabled) continue;
       const name = accessibleName(el).replace(/\s+/g, ' ').trim();
       if (REMOVE_FROM_CADENCE.test(name)) found.push(el);
     }
@@ -462,20 +465,66 @@
   }
 
   // Is this control about the person named? Salesloft puts one of these on
-  // every row of the task queue, each for a different person, and they are
-  // identical — same icon, same name, same everything but the row around them.
-  // Taking the first one on the page is how "Task removed for <someone else>"
-  // happened. So a control counts only if the name turns up while climbing
-  // from it, before the climb reaches another removal control, a landmark, or
-  // anything row-sized no longer.
+  // the rows of the task queue, each for a different person, identical but for
+  // the row around them. The row is the first container around the control
+  // that holds any text of its own: in the queue, the icon cell's parent,
+  // which carries "Call 2 … Corey Adamonis at Omnicell". The name has to be
+  // in *that*, and nowhere further up.
+  //
+  // Further up is where both field failures came from. The queue draws a
+  // row's control only while the mouse is over that row, so the one control on
+  // the page was whichever row the rep's pointer rested on: first the flow
+  // clicked it, and then a looser version of this rule climbed from it to the
+  // whole queue, found the contact's row in there, and would have clicked it
+  // all the same.
   function removalIsFor(el, controls, pattern, landmarks) {
     for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
       if (controls.some((other) => other !== el && node.contains(other))) return false;
       if (landmarks.some((mark) => node.contains(mark))) return false;
       if ((node.textContent || '').length > ROW_TEXT_LIMIT) return false;
-      if (pattern.test(spacedText(node))) return true;
+      if (hasTextBeyond(node, el)) return pattern.test(spacedText(node));
     }
     return false;
+  }
+
+  // Whether `node` holds any text that is not inside `el`.
+  function hasTextBeyond(node, el) {
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const t = walker.currentNode;
+      if (!el.contains(t) && t.nodeValue.trim()) return true;
+    }
+    return false;
+  }
+
+  // Put the pointer, as far as the page can tell, over every place the
+  // contact's name is written outside the landmarks, so the queue draws the
+  // remove control on their row the way it does under the rep's hand. Only
+  // hover events: nothing is clicked here, and whatever this reveals is still
+  // held to removalIsFor() before anything is.
+  function revealRowsFor(pattern, landmarks) {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const hosts = [];
+    while (walker.nextNode() && hosts.length < 20) {
+      const t = walker.currentNode;
+      const host = t.parentElement;
+      if (!host || !pattern.test(t.nodeValue)) continue;
+      if (landmarks.some((mark) => mark.contains(host))) continue;
+      hosts.push(host);
+    }
+    for (const host of hosts) hoverOver(host);
+  }
+
+  function hoverOver(el) {
+    const opts = { bubbles: true, cancelable: true, view: window, relatedTarget: null };
+    try {
+      el.dispatchEvent(new PointerEvent('pointerover', opts));
+      el.dispatchEvent(new MouseEvent('mouseover', opts));
+      for (let n = el, i = 0; n && n !== document.body && i < 8; n = n.parentElement, i++) {
+        n.dispatchEvent(new PointerEvent('pointerenter', { ...opts, bubbles: false }));
+        n.dispatchEvent(new MouseEvent('mouseenter', { ...opts, bubbles: false }));
+      }
+    } catch (e) { /* a hover that cannot be sent only means nothing is revealed */ }
   }
 
   // A row's text with its pieces kept apart. textContent runs adjacent
@@ -488,13 +537,34 @@
     return parts.join(' ');
   }
 
+  // What the removal step saw, for the next bug report: whose name it looked
+  // for, and for each remove control on the page, the row text it read.
+  function dumpRemoval(person) {
+    try {
+      const controls = removalControls();
+      const landmarks = removalLandmarks();
+      const rows = controls.map((el) => {
+        let node = el.parentElement;
+        while (node && node !== document.body && !hasTextBeyond(node, el)) node = node.parentElement;
+        return {
+          shown: isShown(el),
+          row: node ? spacedText(node).replace(/\s+/g, ' ').trim().slice(0, 160) : '',
+          landmarked: !!node && landmarks.some((mark) => node.contains(mark)),
+        };
+      });
+      console.warn('[dialer] remove from cadence: looked for', JSON.stringify(person),
+        '(title:', JSON.stringify(document.title), ') and saw', rows);
+    } catch (e) { /* never let logging break a flow */ }
+  }
+
   // The one removal control for this person, or a reason there is not exactly
   // one. Two is as much a stop as none: guessing between them is how the wrong
   // person comes out of a cadence.
-  function removalFor(person) {
-    const controls = removalControls();
+  function removalFor(person, reveal) {
     const pattern = namePattern(person);
     const landmarks = removalLandmarks();
+    if (reveal) revealRowsFor(pattern, landmarks);
+    const controls = removalControls();
     const mine = controls.filter((el) => removalIsFor(el, controls, pattern, landmarks));
     if (mine.length === 1) return { el: mine[0] };
     return { count: mine.length, total: controls.length };
@@ -504,8 +574,11 @@
   // status strip can carry when there is not.
   async function findRemovalFor(person) {
     let last = { count: 0, total: 0 };
+    let tick = 0;
     const found = await waitFor(() => {
-      last = removalFor(person);
+      // Hover on the first poll and about once a second after, in case the
+      // queue re-renders the row out from under the first one.
+      last = removalFor(person, tick++ % 10 === 0);
       return (last.el || last.count > 1) ? last : null;
     }, CONFIG.stepTimeout).catch(() => null);
     if (found && found.el) return found.el;
@@ -513,6 +586,7 @@
     // and nobody can see why. The names that *were* on the page go to the
     // console, where the next report can pick them up.
     dumpNames();
+    dumpRemoval(person);
     if (last.count > 1) {
       throw new Error(`found ${last.count} Remove from cadence controls for ${person}, so none was clicked`);
     }
@@ -677,6 +751,7 @@
       setStatus(`Removing ${person} from cadence…`);
       const remove = await findRemovalFor(person);
       trace('remove from cadence', remove);
+      hoverOver(remove);
       // Snapshot first: only a dialog that was not already open can be this
       // removal's own.
       const openDialogs = new Set(document.querySelectorAll(DIALOGS));

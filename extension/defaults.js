@@ -388,6 +388,11 @@
   };
 
   root.slContactName = function (doc) {
+    // The tab says it plainly on a contact's page: "Corey Adamonis | People |
+    // Salesloft". That outranks any heading, which is a guess at which element
+    // carries the name.
+    const titled = /^\s*(.+?)\s*\|\s*People\s*\|/i.exec((doc && doc.title) || '');
+    if (titled && titled[1].length <= 60) return titled[1].replace(/\s+/g, ' ');
     const el = root.slContactNameElement(doc);
     if (!el) return '';
     const text = el.textContent.replace(/\s+/g, ' ').trim();
