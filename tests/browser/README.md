@@ -36,7 +36,8 @@ because it caught a real bug** that `node --test` and a screenshot both missed,
 which is the only reason to add another: `inCall`, `confirm`, `confirmButtons`,
 `noRemove`, `noMenuToggle`, `dispositions`, `dispositionSticks`,
 `dispositionPreset`, `removeLabel`, `nameFrom`, `decoys`, `decoyTexts`,
-`toast`, `confirmText`, `loggerIsDialog`, `listPage` and `downshiftMenu`.
+`toast`, `confirmText`, `loggerIsDialog`, `listPage`, `downshiftMenu`,
+`queue`, `queueAfter`, `reorderOnLog`, `person` and `noHeading`.
 
 The ones worth knowing about:
 
@@ -76,6 +77,15 @@ The ones worth knowing about:
   swaps the chevron for a clear (×) button. The read-back looked only at the
   toggle it had clicked, which was detached by then, and sat on
   `Setting "No Answer"…` with the field reading "No Answer".
+- `queue` and `queueAfter` put other people's task rows before and after the
+  contact's, each with an **identical** "Remove person from cadence" control.
+  The flow took the first one on the page and Salesloft answered "Task removed
+  for" someone else. Against that code, this prints `REMOVED WRONG PERSON`.
+  `reorderOnLog` moves the last row to the top when "Log Only" is clicked,
+  since logging re-renders the queue; `noRemove` with a `queue` leaves only
+  someone else's control on the page, the case where a climb reaching the
+  heading would have read their control as the contact's. `person` names the
+  contact in the `People / …` heading, and `noHeading` drops it.
 
 The mock should be as awkward as the real page, or it only tests the happy
 path.

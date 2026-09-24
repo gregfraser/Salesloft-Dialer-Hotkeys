@@ -362,6 +362,39 @@
     return parts.slice(section + 1).some((p) => NOT_A_RECORD.indexOf(p) === -1);
   };
 
+  // Whose page this is, read from the page itself: a Salesloft contact's
+  // heading is a breadcrumb ("People / Peter Nidever"), so the leaf is the
+  // name. Shared by alerts.js, which keys its alert on the contact, and by
+  // content.js, which will not take anyone out of a cadence without a control
+  // that sits beside this name. Empty when nothing on the page reads as one.
+  const CONTACT_NAME_SELECTORS = [
+    '[data-testid="person-details-name"]',
+    '[data-testid*="person-name" i]',
+    '[data-testid*="personName" i]',
+    'h1',
+    'h2',
+  ];
+
+  // The element the name is read from, so a caller can tell the page's own
+  // heading apart from the same name written anywhere else.
+  root.slContactNameElement = function (doc) {
+    for (const sel of CONTACT_NAME_SELECTORS) {
+      let el;
+      try { el = doc.querySelector(sel); } catch (e) { continue; }
+      const text = ((el && el.textContent) || '').replace(/\s+/g, ' ').trim();
+      if (text && text.length <= 60) return el;
+    }
+    return null;
+  };
+
+  root.slContactName = function (doc) {
+    const el = root.slContactNameElement(doc);
+    if (!el) return '';
+    const text = el.textContent.replace(/\s+/g, ' ').trim();
+    const leaf = text.split('/').pop().trim();
+    return leaf || text;
+  };
+
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       DEFAULTS,
@@ -370,6 +403,8 @@
       slTranscriptFilename: root.slTranscriptFilename,
       slParseTags: root.slParseTags,
       slIsContactUrl: root.slIsContactUrl,
+      slContactName: root.slContactName,
+      slContactNameElement: root.slContactNameElement,
       SL_ICONS: root.SL_ICONS,
       slHotkeyFromEvent: root.slHotkeyFromEvent,
       slHotkeyMatches: root.slHotkeyMatches,

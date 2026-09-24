@@ -218,6 +218,82 @@ for (const nameFrom of ['svg-title', 'aria-label', 'title', 'labelledby']) {
   await p.close();
 }
 
+console.log('\nWhose control it is');
+{
+  // The field report: the queue beside the contact has an identical remove
+  // control on every row, and the flow took the first one on the page, which
+  // belonged to someone else. Salesloft said "Task removed for <them>".
+  const p = await open(ON, { queue: ['Joshua Tan', 'Andreea Boeck'], queueAfter: ['Paul Rohlwing'] });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(4000);
+  const a = await acted(p);
+  check('nobody else is removed when their rows come first', !a.some((x) => x.startsWith('REMOVED WRONG')), a.join(' | '));
+  check('the person on screen is', a.includes('remove from cadence'), a.join(' | '));
+  const s = await statusText(p);
+  check('and the status says who', s.includes('Eric Kersten removed from cadence'), 'status was: ' + s);
+  await p.close();
+}
+{
+  // Logging re-renders the queue; a reference taken before it, or "the first
+  // one", can land on the row that moved up.
+  const p = await open(ON, { queueAfter: ['Joshua Tan'], reorderOnLog: true });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(4000);
+  const a = await acted(p);
+  check('a queue that reorders on logging still removes the right person',
+        a.includes('remove from cadence') && !a.some((x) => x.startsWith('REMOVED WRONG')), a.join(' | '));
+  await p.close();
+}
+{
+  // The most dangerous page: the only removal control on it is someone
+  // else's, and the contact's name is still in the heading.
+  const p = await open(ON, { noRemove: true, queue: ['Joshua Tan'] });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(11000);
+  const s = await statusText(p);
+  eq('when the only control is someone else\'s, nothing is touched', await acted(p), []);
+  check('and it says so', s.startsWith('Stopped:') && s.includes('none was clicked') && s.includes('Nothing was logged'),
+        'status was: ' + s);
+  await p.close();
+}
+{
+  // Two controls beside this person's name: guessing between them is still a
+  // guess, so neither is clicked.
+  const p = await open(ON, { queueAfter: ['Eric Kersten'] });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(4000);
+  const s = await statusText(p);
+  eq('two controls for the same person stop the flow before anything', await acted(p), []);
+  check('and say how many it found', s.includes('found 2'), 'status was: ' + s);
+  await p.close();
+}
+{
+  const p = await open(ON, { noHeading: true });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(2000);
+  const s = await statusText(p);
+  eq('a page that does not say whose it is removes nobody', await acted(p), []);
+  check('and says why', s.includes('could not tell whose page'), 'status was: ' + s);
+  await p.close();
+}
+{
+  // Dialled from a list, the heading is the list's, not a person's. Here it is
+  // the cadence's name, which every queue row mentions, and the only row is
+  // someone else's: read as a name, it would have picked them.
+  const p = await open(ON, { listPage: true, noRemove: true, queue: ['Joshua Tan'] });
+  await p.evaluate(() => {
+    const h1 = document.createElement('h1');
+    h1.textContent = 'Account-Based Targeting';
+    document.getElementById('app').prepend(h1);
+    window.__slOnMessage({ type: 'dialer-action', action: 'not-in-service', confirmed: true }, null, () => {});
+  });
+  await p.waitForTimeout(2000);
+  eq('off the contact\'s own page, nobody is removed and nothing logged', await acted(p), []);
+  await p.close();
+}
+{
+  // "Eric Kersten" must not be found inside a longer name.
+  const p = await open(ON, { noRemove: true, queue: ['Eric Kerstenson'] });
+  await p.click(strip); await p.click(strip); await p.waitForTimeout(11000);
+  eq('a name that merely starts the same is not a match', await acted(p), []);
+  await p.close();
+}
+
 console.log('\nWhen Salesloft has moved');
 {
   const p = await open(ON, { noRemove: true });
@@ -225,8 +301,9 @@ console.log('\nWhen Salesloft has moved');
   const s = await statusText(p);
   check('a missing cadence control names itself rather than saying "element"',
         s.includes('Remove from cadence control') && s.includes('Finish manually'), 'status was: ' + s);
-  eq('but the call is still logged first', await acted(p),
-     ['disposition=Not in Service', 'menu opened', 'Log Only']);
+  // It is looked for before anything is touched, so a page without one stops
+  // clean: no call ended, nothing logged, nobody removed.
+  eq('and it is missed before anything is logged', await acted(p), []);
   await p.close();
 }
 {

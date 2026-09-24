@@ -169,7 +169,13 @@ window.__buildSalesloft = (opts = {}) => {
         const li = document.createElement('li');
         li.setAttribute('role', 'menuitem');
         li.textContent = name;
-        li.addEventListener('click', () => { note(name); ul.remove(); });
+        li.addEventListener('click', () => {
+          note(name);
+          ul.remove();
+          // Logging re-renders the queue, and the rows need not come back in
+          // the order they left: `reorderOnLog` moves the last row to the top.
+          if (opts.reorderOnLog) queue.prepend(queue.lastElementChild);
+        });
         ul.appendChild(li);
       }
       document.body.appendChild(ul);
@@ -178,30 +184,66 @@ window.__buildSalesloft = (opts = {}) => {
     logger.appendChild(caret);
   }
 
-  // The cadence control, outside the logger, named only by aria-label.
-  if (!opts.noRemove) {
+  // Whose page this is. Salesloft's heading is a breadcrumb.
+  const PERSON = opts.person || 'Eric Kersten';
+  if (!opts.listPage && !opts.noHeading) {
+    const h1 = document.createElement('h1');
+    h1.textContent = 'People / ' + PERSON;
+    app.insertBefore(h1, app.firstChild);
+  }
+
+  // The cadence control lives on a row of the task queue beside the contact,
+  // and every row has one. They are identical but for the person in the row
+  // around them, so `queue` puts other people's rows *ahead* of this one, as
+  // the real queue had them when the flow took the first control on the page
+  // and Salesloft answered "Task removed for <someone else>".
+  const NAME = opts.removeLabel || 'Remove person from cadence';
+  const nameFrom = opts.nameFrom || 'svg-title';
+  let labelN = 0;
+  const makeRemove = (onClick) => {
     const remove = document.createElement('button');
     // How Salesloft really names it: not an aria-label on the button, but the
     // <title> of the icon inside it. `nameFrom` switches between the ways an
     // icon button can carry an accessible name, because reading only the
     // attribute is what made this control unfindable in the field.
-    const NAME = opts.removeLabel || 'Remove person from cadence';
-    const nameFrom = opts.nameFrom || 'svg-title';
     if (nameFrom === 'aria-label') remove.setAttribute('aria-label', NAME);
     if (nameFrom === 'title') remove.setAttribute('title', NAME);
     if (nameFrom === 'labelledby') {
       const lbl = document.createElement('span');
-      lbl.id = 'remove-label';
+      lbl.id = 'remove-label-' + (++labelN);
       lbl.textContent = NAME;
       lbl.style.cssText = 'position:absolute;left:-9999px';
       app.appendChild(lbl);
-      remove.setAttribute('aria-labelledby', 'remove-label');
+      remove.setAttribute('aria-labelledby', lbl.id);
     }
     remove.innerHTML = nameFrom === 'svg-title'
       ? `<svg width="10" height="10" role="graphics-symbol"><title>${NAME}</title></svg>`
       : '<svg width="10" height="10"></svg>';
     remove.style.cssText = 'width:16px;height:16px';
-    remove.addEventListener('click', () => {
+    remove.addEventListener('click', onClick);
+    return remove;
+  };
+  const queue = document.createElement('div');
+  app.appendChild(queue);
+  const addRow = (who, onClick) => {
+    const row = document.createElement('div');
+    const wrap = document.createElement('div');
+    const inner = document.createElement('div');
+    inner.appendChild(makeRemove(onClick));
+    wrap.appendChild(inner);
+    row.appendChild(wrap);
+    const text = document.createElement('div');
+    text.innerHTML = `<span>Call 4</span><span>D4 S4: Account-Based Targeting</span>` +
+      `<span>${who} at Acme</span><span>Director, Quality</span>`;
+    row.appendChild(text);
+    queue.appendChild(row);
+  };
+  for (const other of (opts.queue || [])) {
+    addRow(other, () => note('REMOVED WRONG PERSON: ' + other));
+  }
+
+  if (!opts.noRemove) {
+    addRow(PERSON, () => {
       note('remove from cadence');
       // Salesloft throws toasts for unrelated things. This one is about someone
       // else entirely and carries a dialog role, and it lands in the same
@@ -231,7 +273,9 @@ window.__buildSalesloft = (opts = {}) => {
       document.body.appendChild(dialog);
       note('dialog opened');
     });
-    app.appendChild(remove);
+  }
+  for (const other of (opts.queueAfter || [])) {
+    addRow(other, () => note('REMOVED WRONG PERSON: ' + other));
   }
 };
 
