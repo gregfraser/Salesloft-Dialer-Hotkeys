@@ -19,17 +19,6 @@
     compactBar: false,
     disposition: 'No Answer',
 
-    // -- not in service --
-    // A third, smaller action: log the call with its own disposition and take
-    // the person out of the cadence, so a dead number stops coming back round.
-    // Off by default — it is the one thing here that removes a person from a
-    // cadence, and a rep who has not asked for it should not have a control
-    // that does on their plate. The disposition is separate from the one above
-    // for the same reason "No Answer" is configurable: it has to match the
-    // dropdown text exactly, and every team words this one differently.
-    notInService: false,
-    notInServiceDisposition: 'Not in Service',
-
     // -- transcription --
     // The master switch is the only choice: with it on, transcription always
     // starts when a call is detected. Saving is never automatic — a cadence is
@@ -49,15 +38,14 @@
     alertStrict: true,
 
     // -- key bindings --
-    // The keys the rep picked for the three dialer actions. See the section
+    // The keys the rep picked for the two dialer actions. See the section
     // below for why the extension keeps its own bindings at all, and why an
     // empty string (no key) is a normal value.
-    // The three sit under one hand: left and right for the pair, up for the
-    // third. A bound arrow stops scrolling the Salesloft page while the overlay
-    // is loaded, because the in-page handler preventDefaults whatever it
-    // matches — already true of left and right, and now of up. Empty is still a
-    // normal value here: a rep who wants the page back clears it in the popup.
-    hotkeys: { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight', 'not-in-service': 'ArrowUp' },
+    // The pair sits under one hand: left and right. A bound arrow stops
+    // scrolling the Salesloft page while the overlay is loaded, because the
+    // in-page handler preventDefaults whatever it matches. A rep who wants the
+    // page back clears it in the popup.
+    hotkeys: { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight' },
   };
 
   root.SL_DEFAULTS = DEFAULTS;
@@ -177,11 +165,6 @@
     copy: `${SVG_OPEN}<rect x="9" y="9" width="11" height="11" rx="2.2"/>` +
       '<path d="M15.5 5.5h-11a1 1 0 0 0-1 1v9"/></svg>',
     clear: `${SVG_OPEN}<path d="m6.5 6.5 11 11"/><path d="m17.5 6.5-11 11"/></svg>`,
-    // The third control's mark: the "no" sign, drawn at the same weight as the
-    // rest rather than borrowed from whatever font has ⊘.
-    block: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-      'stroke-width="2.2" stroke-linecap="round" aria-hidden="true" focusable="false">' +
-      '<circle cx="12" cy="12" r="8.2"/><path d="m6.2 6.2 11.6 11.6"/></svg>',
   };
 
   // ---------------- Key bindings ----------------
@@ -191,7 +174,7 @@
   // another tab, and its picker takes a Ctrl or Alt combination and nothing
   // else — no number pad, and it silently leaves a command unassigned when the
   // suggested key is already taken. A rep working a cadence has one hand on the
-  // pad, so the extension also keeps its own bindings for the three dialer
+  // pad, so the extension also keeps its own bindings for the two dialer
   // actions and listens for them itself, in the Salesloft page and the floating
   // panel. Those two are the only places a key event reaches this extension, so
   // the layers sit side by side: the rep's own key where the work happens,
@@ -204,7 +187,7 @@
   //
   // Empty is a normal value: a rep who only wants the number pad clears the
   // other key, and every surface that prints a keycap prints nothing for it.
-  const HOTKEY_ACTIONS = ['kill-and-log', 'start-call', 'not-in-service'];
+  const HOTKEY_ACTIONS = ['kill-and-log', 'start-call'];
 
   root.SL_HOTKEY_ACTIONS = HOTKEY_ACTIONS;
 
@@ -362,11 +345,9 @@
     return parts.slice(section + 1).some((p) => NOT_A_RECORD.indexOf(p) === -1);
   };
 
-  // Whose page this is, read from the page itself: a Salesloft contact's
-  // heading is a breadcrumb ("People / Peter Nidever"), so the leaf is the
-  // name. Shared by alerts.js, which keys its alert on the contact, and by
-  // content.js, which will not take anyone out of a cadence without a control
-  // that sits beside this name. Empty when nothing on the page reads as one.
+  // Whose page this is, read from the page itself. alerts.js keys its alert on
+  // the contact, so the same tags on the next person still raise a fresh one.
+  // Empty when nothing on the page reads as one.
   const CONTACT_NAME_SELECTORS = [
     '[data-testid="person-details-name"]',
     '[data-testid*="person-name" i]',
@@ -375,24 +356,22 @@
     'h2',
   ];
 
-  // The element the name is read from, so a caller can tell the page's own
-  // heading apart from the same name written anywhere else.
-  root.slContactNameElement = function (doc) {
+  root.slContactName = function (doc) {
+    // The tab says it plainly on a contact's page: "Corey Adamonis | People |
+    // Salesloft". That outranks any heading, which is a guess at which element
+    // carries the name.
+    const titled = /^\s*(.+?)\s*\|\s*People\s*\|/i.exec((doc && doc.title) || '');
+    if (titled && titled[1].length <= 60) return titled[1].replace(/\s+/g, ' ');
+    // Otherwise the heading, which is a breadcrumb ("People / Peter Nidever"),
+    // so the leaf is the name.
     for (const sel of CONTACT_NAME_SELECTORS) {
       let el;
       try { el = doc.querySelector(sel); } catch (e) { continue; }
       const text = ((el && el.textContent) || '').replace(/\s+/g, ' ').trim();
-      if (text && text.length <= 60) return el;
+      if (!text || text.length > 60) continue;
+      return text.split('/').pop().trim() || text;
     }
-    return null;
-  };
-
-  root.slContactName = function (doc) {
-    const el = root.slContactNameElement(doc);
-    if (!el) return '';
-    const text = el.textContent.replace(/\s+/g, ' ').trim();
-    const leaf = text.split('/').pop().trim();
-    return leaf || text;
+    return '';
   };
 
   if (typeof module !== 'undefined' && module.exports) {
@@ -404,7 +383,6 @@
       slParseTags: root.slParseTags,
       slIsContactUrl: root.slIsContactUrl,
       slContactName: root.slContactName,
-      slContactNameElement: root.slContactNameElement,
       SL_ICONS: root.SL_ICONS,
       slHotkeyFromEvent: root.slHotkeyFromEvent,
       slHotkeyMatches: root.slHotkeyMatches,

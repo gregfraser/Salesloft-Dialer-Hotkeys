@@ -68,18 +68,6 @@ The key printed on each button is always the one that works, so you never have t
 
 ---
 
-## Not in Service (optional)
-
-For numbers that are disconnected. One action logs the call as **Not in Service** and takes the person out of the cadence, so you never dial them again.
-
-**Turn it on:** click the extension icon and switch on **Not in Service button**. A small button appears under the other two, bound to <kbd>↑</kbd>.
-
-**Use it:** press <kbd>↑</kbd> (or click the button) **twice**. The first press turns it red and asks "Remove from cadence?". The second press, within 3 seconds, does it. If you don't press again, it quietly goes back to normal.
-
-The disposition it logs is its own setting, **Not in Service disposition**. Like the other one, it must match Salesloft's dropdown text exactly.
-
----
-
 ## Contact alerts
 
 Before you dial, the extension reads the Disposition and Sentiment tags already on the contact's page. If it finds one on your watch list, a coloured band opens above the buttons (and in the floating panel, if you use it). It only reads what's on the page. Nothing is sent or saved.
@@ -96,10 +84,8 @@ Click the extension icon to open them.
 |---|---|
 | **Floating panel** | Puts the buttons in their own small window you can drag anywhere, even to a second monitor. It stays open while you work in other tabs. |
 | **Buttons on Salesloft page** | Shows or hides the buttons on the page. Turn it off if you only use the floating panel or the keys. |
-| **Compact bar** | Shrinks the buttons to a small bar while you're between calls. It opens back to full size during a call. (The Not in Service button isn't on the bar; use the full size or the floating panel for that.) |
+| **Compact bar** | Shrinks the buttons to a small bar while you're between calls. It opens back to full size during a call. |
 | **Disposition** | What the red button logs. Starts as "No Answer". Only change it if your team's dropdown says something different, and match it exactly, capitals included. |
-| **Not in Service button** | Turns on the third button. See [Not in Service](#not-in-service-optional). |
-| **Not in Service disposition** | What that button logs. Starts as "Not in Service". |
 | **Key bindings** | Your key for each action. See [Change your keys](#change-your-keys). |
 | **Alert on tags** | Turns contact alerts on or off. |
 | **Tags to watch** | Which tags raise an alert, separated by commas and spelled exactly as Salesloft spells them. Starts with No Interest, Bad Fit, Meeting Scheduled, Interested, Connected, Wrong Number and Do Not Contact. |
@@ -157,15 +143,9 @@ The extension couldn't find something it expected on the Salesloft page, usually
 </details>
 
 <details>
-<summary><strong>Not in Service says it needs the full plate</strong></summary>
-
-The Not in Service button isn't on the compact bar, because it asks you to confirm and the bar has nowhere to show that. Turn **Compact bar** off, or use the floating panel.
-</details>
-
-<details>
 <summary><strong>A call was logged with the wrong disposition</strong></summary>
 
-Check **Disposition** (or **Not in Service disposition**) in the settings. It must match your Salesloft dropdown word for word.
+Check **Disposition** in the settings. It must match your Salesloft dropdown word for word.
 </details>
 
 <details>
@@ -190,5 +170,4 @@ Transcription problems (can't hear the prospect, "offline", falling behind) are 
 - It only runs on `app.salesloft.com` and can't see any other website.
 - It doesn't store your calls, contacts or prospect data. It clicks the same buttons you would, faster.
 - It never logs a call without setting the disposition first. If any step fails, it stops and tells you rather than logging something half-finished.
-- Not in Service logs the call before removing the person, never the other way round.
 - If transcription breaks, it goes quiet and the call carries on. It never interrupts you with a popup.

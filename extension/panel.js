@@ -19,7 +19,6 @@ const els = {
   clear: document.getElementById('clear'),
   transcript: document.getElementById('transcript'),
   scrollHint: document.getElementById('scroll-hint'),
-  notInService: document.getElementById('not-in-service'),
 };
 
 // Drawn marks rather than text glyphs, from the same set the on-page pane uses
@@ -29,7 +28,6 @@ els.pause.innerHTML = self.SL_ICONS.pause;
 els.copy.innerHTML = self.SL_ICONS.copy;
 els.save.innerHTML = self.SL_ICONS.save;
 els.clear.innerHTML = self.SL_ICONS.clear;
-els.notInService.querySelector('.nis-icon').innerHTML = self.SL_ICONS.block;
 
 const view = {
   entries: [],
@@ -41,10 +39,8 @@ const view = {
 };
 
 // ------------------------------------------------------------ dialer actions
-// `extra` carries anything the action needs beyond its name — today only
-// `confirmed`, which says the rep already answered on this surface.
-function send(action, extra) {
-  chrome.runtime.sendMessage(Object.assign({ type: 'dialer-action', action }, extra)).catch(() => {
+function send(action) {
+  chrome.runtime.sendMessage({ type: 'dialer-action', action }).catch(() => {
     setStatus('Background not reachable — reload extension', 'err');
   });
 }
@@ -54,55 +50,10 @@ for (const button of actionButtons) {
   button.addEventListener('click', () => send(button.dataset.action));
 }
 
-// ---------------------------------------------------- not in service (armed)
-// One press arms, a second within three seconds sends. This is the only
-// control in this window that takes a person out of a cadence, and putting
-// them back is manual — but a confirmation dialog is exactly what this
-// extension does not do mid-call, so the control itself asks and waits.
-const ARM_MS = 3000;
-let armed = false;
-let armHandle = null;
-
-function renderNotInService() {
-  els.notInService.classList.toggle('armed', armed);
-  els.notInService.querySelector('.nis-label').textContent =
-    armed ? 'Remove from cadence?' : 'Not in Service';
-  els.notInService.setAttribute('aria-pressed', String(armed));
-  // The keycap goes while it is asking: the question is longer than the label
-  // it replaces, and the key is not news at the moment the control is waiting
-  // to hear whether it should go ahead.
-  els.notInService.querySelector('.sub').style.display = armed ? 'none' : '';
-}
-
-function disarm() {
-  clearTimeout(armHandle);
-  armHandle = null;
-  if (!armed) return;
-  armed = false;
-  renderNotInService();
-}
-
-function notInService() {
-  if (!armed) {
-    armed = true;
-    clearTimeout(armHandle);
-    armHandle = setTimeout(disarm, ARM_MS);
-    renderNotInService();
-    setStatus('Press again to confirm the removal', 'warn');
-    return;
-  }
-  disarm();
-  // Confirmed here, on the surface the rep was looking at. The content script
-  // would otherwise arm a second time and swallow this press.
-  send('not-in-service', { confirmed: true });
-}
-
-els.notInService.addEventListener('click', notInService);
-
 // The press, on the same spring the on-page plate uses, so a button answers
 // identically whichever surface the rep is looking at. Springs write an inline
 // transform, which is why panel.html transitions colour only.
-for (const button of [...actionButtons, els.notInService, els.pause, els.copy, els.save, els.clear, els.scrollHint]) {
+for (const button of [...actionButtons, els.pause, els.copy, els.save, els.clear, els.scrollHint]) {
   if (button) self.slPressable(button);
 }
 
@@ -126,7 +77,7 @@ let hotkeys = self.slNormalizeHotkeys(self.SL_DEFAULTS.hotkeys);
 let commandKeys = {};
 
 function renderKeys() {
-  for (const button of [...actionButtons, els.notInService]) {
+  for (const button of actionButtons) {
     const action = button.dataset.action;
     // The rep's own binding reaches this window and the Salesloft page;
     // Chrome's reaches any tab. The sub-line shows the rep's, and falls back to
@@ -143,7 +94,6 @@ function renderKeys() {
     if (anywhere && anywhere !== own) said.push(`${anywhere} from any tab`);
     button.title = said.join(', ') || 'No key bound — set one in the extension settings';
   }
-  renderNotInService();
   // True only while Chrome has a shortcut of its own: the rep's bindings need
   // this window or the Salesloft page to have focus.
   if (statusPristine) {
@@ -159,14 +109,7 @@ document.addEventListener('keydown', (e) => {
   for (const action of self.SL_HOTKEY_ACTIONS) {
     if (pressed !== hotkeys[action]) continue;
     e.preventDefault();
-    // The third control arms rather than fires, whichever way it is reached:
-    // a key that removed someone from a cadence on one press would be the one
-    // binding in this extension a rep could regret having bound.
-    if (action === 'not-in-service') {
-      if (els.notInService.classList.contains('on')) notInService();
-    } else {
-      send(action);
-    }
+    send(action);
     return;
   }
 });
@@ -432,7 +375,6 @@ chrome.storage.sync.get(self.SL_DEFAULTS, (settings) => {
   // The panel stays fully usable with transcription off — the pane is simply
   // not there.
   els.transcription.classList.toggle('on', !!settings.transcription);
-  els.notInService.classList.toggle('on', !!settings.notInService);
   hotkeys = self.slNormalizeHotkeys(settings.hotkeys);
   renderKeys();
 });
@@ -441,11 +383,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync') return;
   if (changes.transcription) {
     els.transcription.classList.toggle('on', !!changes.transcription.newValue);
-  }
-  if (changes.notInService) {
-    els.notInService.classList.toggle('on', !!changes.notInService.newValue);
-    // A control that is going away must not leave a press half-made against it.
-    if (!changes.notInService.newValue) disarm();
   }
   if (changes.hotkeys) {
     hotkeys = self.slNormalizeHotkeys(changes.hotkeys.newValue);

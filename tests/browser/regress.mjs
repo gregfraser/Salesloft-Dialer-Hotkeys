@@ -36,7 +36,7 @@ const act = (p, action) => p.evaluate((a) =>
 
 console.log('\nThe two flows I did not touch');
 {
-  const p = await open({ pageOverlay: true, notInService: true }, { inCall: true });
+  const p = await open({ pageOverlay: true }, { inCall: true });
   await act(p, 'kill-and-log');
   await p.waitForTimeout(2000);
   eq('kill-and-log still ends, dispositions and completes', await acted(p),
@@ -49,7 +49,7 @@ console.log('\nThe two flows I did not touch');
   // The bug from the field: Downshift's menu is in the DOM before it opens, so
   // counting it among the lists that were "already there" ruled out the very
   // list the toggle opened.
-  const p = await open({ pageOverlay: true, notInService: true }, { inCall: true, downshiftMenu: true });
+  const p = await open({ pageOverlay: true }, { inCall: true, downshiftMenu: true });
   await act(p, 'kill-and-log');
   await p.waitForTimeout(2000);
   eq('kill-and-log finds the option in a menu that was always rendered', await acted(p),
@@ -61,7 +61,7 @@ console.log('\nThe two flows I did not touch');
 {
   // The read-back now looks past the toggle to the field around it. It must
   // still refuse a pick that did not take, or the call logs with no disposition.
-  const p = await open({ pageOverlay: true, notInService: true },
+  const p = await open({ pageOverlay: true },
                        { inCall: true, downshiftMenu: true, dispositionSticks: false });
   await act(p, 'kill-and-log');
   await p.waitForTimeout(10000);
@@ -74,7 +74,7 @@ console.log('\nThe two flows I did not touch');
 {
   // "Call" has to be found by its exact visible text, and the mock's other
   // buttons must not satisfy that.
-  const p = await open({ pageOverlay: true, notInService: true }, {});
+  const p = await open({ pageOverlay: true }, {});
   await p.evaluate(() => {
     const b = document.createElement('button');
     b.textContent = 'Call';
@@ -87,7 +87,7 @@ console.log('\nThe two flows I did not touch');
   await p.close();
 }
 {
-  const p = await open({ pageOverlay: true, notInService: true }, {});
+  const p = await open({ pageOverlay: true }, {});
   await act(p, 'kill-and-log');
   await p.waitForTimeout(300);
   // The pair must still be gated while a flow runs.
@@ -96,42 +96,11 @@ console.log('\nThe two flows I did not touch');
   await p.close();
 }
 
-console.log('\nToggling the setting live');
-{
-  const p = await open({ pageOverlay: true, notInService: false }, {});
-  check('starts with no strip', (await p.$('#sl-hotkey-overlay .sl-second')) === null);
-  await p.evaluate(() => window.__slOnStorage({ notInService: { newValue: true } }, 'sync'));
-  await p.waitForTimeout(300);
-  check('turning it on rebuilds the plate with the strip', (await p.$('#sl-hotkey-overlay .sl-second')) !== null);
-  const pair = await p.evaluate(() => [...document.querySelectorAll('#sl-hotkey-overlay .sl-act')]
-    .map((b) => Math.round(b.getBoundingClientRect().width)));
-  eq('and the pair is still equal and unchanged', pair, [104, 104]);
-  await p.evaluate(() => window.__slOnStorage({ notInService: { newValue: false } }, 'sync'));
-  await p.waitForTimeout(300);
-  check('turning it off takes it away again', (await p.$('#sl-hotkey-overlay .sl-second')) === null);
-  await p.close();
-}
-{
-  // Arming, then losing the control to a rebuild, must not leave a press made.
-  const p = await open({ pageOverlay: true, notInService: true }, {});
-  await p.click('#sl-hotkey-overlay .sl-second');
-  await p.waitForTimeout(150);
-  await p.evaluate(() => window.__slOnStorage({ transcription: { newValue: true } }, 'sync'));
-  await p.waitForTimeout(300);
-  const label = await p.textContent('#sl-hotkey-overlay .sl-second .sl-second-label');
-  check('a rebuild mid-arm disarms rather than carrying the press over', label === 'Not in Service',
-        'label was: ' + label);
-  await p.click('#sl-hotkey-overlay .sl-second');
-  await p.waitForTimeout(800);
-  eq('so the next press arms rather than committing', await acted(p), []);
-  await p.close();
-}
-
 console.log('\nWhere the plate is allowed to be');
 {
   // The cadence People list: the logger popout is open over it, but nothing
   // has been dialled. A dialer plate has no business beside 170 rows.
-  const p = await open({ pageOverlay: true, notInService: true }, { listPage: true });
+  const p = await open({ pageOverlay: true }, { listPage: true });
   check('a list page with an open popout gets no plate',
         (await p.$('#sl-hotkey-overlay')) === null);
   await p.close();
@@ -139,7 +108,7 @@ console.log('\nWhere the plate is allowed to be');
 {
   // Same page, but the call is up. Taking the buttons away mid-call is the one
   // outcome worse than showing them early.
-  const p = await open({ pageOverlay: true, notInService: true }, { listPage: true });
+  const p = await open({ pageOverlay: true }, { listPage: true });
   await p.evaluate(() => { window.__slCallState = 'IN_CALL'; });
   await p.evaluate(() => {
     // call-detect reports through the same path a real detection would.
@@ -154,7 +123,7 @@ console.log('\nWhere the plate is allowed to be');
   await p.close();
 }
 {
-  const p = await open({ pageOverlay: true, notInService: true }, {});
+  const p = await open({ pageOverlay: true }, {});
   check('a contact view still gets the plate with no call at all',
         (await p.$('#sl-hotkey-overlay')) !== null);
   await p.close();
@@ -168,21 +137,18 @@ const plate = (p) => p.evaluate(() => {
   return { w: Math.round(r.width), h: Math.round(r.height) };
 });
 {
-  const p = await open({ pageOverlay: true, notInService: true }, {});
+  const p = await open({ pageOverlay: true }, {});
   eq('the full plate is what you get by default', await plate(p), { w: 236, h: 160 });
-  check('and the third control is on it', (await p.$('#sl-hotkey-overlay .sl-second')) !== null);
   await p.close();
 }
 {
-  const p = await open({ pageOverlay: true, compactBar: true, notInService: true }, {});
+  const p = await open({ pageOverlay: true, compactBar: true }, {});
   eq('compact is a 214 bar, the width of the column it replaces', await plate(p), { w: 214, h: 44 });
-  check('no strip on it — that control is not for this surface',
-        (await p.$('#sl-hotkey-overlay .sl-second')) === null);
-  check('but both actions are, and they still answer', (await p.$$('#sl-hotkey-overlay .sl-act')).length === 2);
+  check('both actions are on it, and they still answer', (await p.$$('#sl-hotkey-overlay .sl-act')).length === 2);
   await p.close();
 }
 {
-  const p = await open({ pageOverlay: true, compactBar: true, notInService: true }, {});
+  const p = await open({ pageOverlay: true, compactBar: true }, {});
   await p.evaluate(() => {
     const el = document.createElement('button');
     el.setAttribute('aria-label', 'End Call');
@@ -204,25 +170,21 @@ const plate = (p) => p.evaluate(() => {
   await p.close();
 }
 {
-  // The shipped key is an arrow now, and the compact bar has no strip to arm.
-  // Refusing has to say something true on that surface, not "turn the on-page
-  // buttons on" to a rep who already has.
-  const p = await open({ pageOverlay: true, compactBar: true, notInService: true,
+  // An older install shipped a third action on the up arrow, and bindings are
+  // synced. That key must now do nothing at all, on either surface, and give
+  // the page its scrolling back.
+  const p = await open({ pageOverlay: true,
                          hotkeys: { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight',
-                                    'not-in-service': 'ArrowUp' } }, {});
-  await p.keyboard.press('ArrowUp');
+                                    'not-in-service': 'ArrowUp' } }, { inCall: true });
+  const prevented = await p.evaluate(() => {
+    const e = new KeyboardEvent('keydown', { code: 'ArrowUp', key: 'ArrowUp', bubbles: true, cancelable: true });
+    document.body.dispatchEvent(e);
+    return e.defaultPrevented;
+  });
   await p.waitForTimeout(400);
-  const s = await statusText(p);
-  check('the key refuses on the compact bar and says why', s.includes('full plate'), 'status was: ' + s);
-  eq('and takes no action', await acted(p), []);
-  await p.close();
-}
-{
-  const p = await open({ pageOverlay: true, notInService: true }, {});
-  await p.keyboard.press('ArrowUp');
-  await p.waitForTimeout(400);
-  check('the shipped arrow arms on the full plate',
-        (await p.textContent('#sl-hotkey-overlay .sl-second .sl-second-label')) === 'Remove from cadence?');
+  eq('a leftover up-arrow binding takes no action', await acted(p), []);
+  check('and does not swallow the key', !prevented);
+  check('and no third control is drawn', (await p.$('#sl-hotkey-overlay .sl-second')) === null);
   await p.close();
 }
 
