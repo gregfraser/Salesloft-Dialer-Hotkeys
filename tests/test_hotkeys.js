@@ -142,21 +142,19 @@ test('the shipped defaults are the arrow keys, labelled as arrows', () => {
   assert.deepStrictEqual(DEFAULTS.hotkeys, {
     'kill-and-log': 'ArrowLeft',
     'start-call': 'ArrowRight',
-    'not-in-service': 'ArrowUp',
   });
   assert.strictEqual(slHotkeyLabel('ArrowLeft', true), '←');
   assert.strictEqual(slHotkeyLabel('ArrowRight', false), '→');
-  assert.strictEqual(slHotkeyLabel('ArrowUp', true), '↑');
   assert.strictEqual(slHotkeyFromEvent(keyEvent('ArrowLeft')), 'ArrowLeft');
 });
 
-test('the three shipped arrows are three different keys', () => {
+test('the two shipped arrows are two different keys', () => {
   // One key, one action: if two of these matched, slNormalizeHotkeys would
   // silently blank the second and a button would ship claiming a key that
   // does nothing.
   const normalized = slNormalizeHotkeys(DEFAULTS.hotkeys);
   const bound = SL_HOTKEY_ACTIONS.map((a) => normalized[a]);
-  assert.deepStrictEqual(bound, ['ArrowLeft', 'ArrowRight', 'ArrowUp']);
+  assert.deepStrictEqual(bound, ['ArrowLeft', 'ArrowRight']);
   assert.strictEqual(new Set(bound).size, bound.length);
 });
 
@@ -165,8 +163,8 @@ test('an action with no key normalises to empty, not to undefined', () => {
   // keypress. A missing entry there would compare undefined against a string
   // on every keystroke rather than reading as "this action has no key".
   const normalized = slNormalizeHotkeys({ 'kill-and-log': 'ArrowLeft' });
-  assert.strictEqual(normalized['not-in-service'], '');
-  assert.strictEqual(slHotkeyLabel(normalized['not-in-service'], true), '');
+  assert.strictEqual(normalized['start-call'], '');
+  assert.strictEqual(slHotkeyLabel(normalized['start-call'], true), '');
 });
 
 test('the shipped defaults survive normalising unchanged', () => {
@@ -190,17 +188,15 @@ test('two actions cannot share one key', () => {
   assert.strictEqual(normalized['start-call'], '');
 });
 
-test('one key, one action — across all three, not just the pair', () => {
-  // The third action is the one that removes a person from a cadence, so a key
-  // it shared with another button would be the worst version of this bug.
+test('a binding left in storage for an action that no longer exists is dropped', () => {
+  // Storage is synced, and an older install shipped a third action on the up
+  // arrow. Only the actions that exist are ever read back.
   const normalized = slNormalizeHotkeys({
-    'kill-and-log': 'Numpad1',
-    'start-call': 'Numpad1',
-    'not-in-service': 'Numpad1',
+    'kill-and-log': 'ArrowLeft',
+    'start-call': 'ArrowRight',
+    'not-in-service': 'ArrowUp',
   });
-  assert.strictEqual(normalized['kill-and-log'], 'Numpad1');
-  assert.strictEqual(normalized['start-call'], '');
-  assert.strictEqual(normalized['not-in-service'], '');
+  assert.deepStrictEqual(normalized, { 'kill-and-log': 'ArrowLeft', 'start-call': 'ArrowRight' });
 });
 
 test('anything that is not a binding resolves to no key', () => {

@@ -112,52 +112,6 @@
       box-shadow: var(--btn-shadow), 0 10px 20px rgba(30, 140, 80, .16);
     }
 
-    /* -- the third action --------------------------------------------------- */
-    /* A raised face rather than a third gradient, at a quarter of the pair's
-       height: it is reached for once in a hundred dials, and a control that
-       looked like the other two would be read as often as them. Hidden until
-       the rep turns it on. */
-    #not-in-service {
-      display: none;
-      align-items: center;
-      gap: 6px;
-      height: 26px;
-      flex-shrink: 0;
-      padding: 0 8px;
-      border-radius: 5px;
-      background: var(--raised);
-      border: 1px solid var(--raised-border);
-      box-shadow: var(--raised-top);
-      color: var(--soft);
-      font-family: inherit;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
-    }
-    #not-in-service.on { display: flex; }
-    #not-in-service .nis-icon { display: flex; flex: 0 0 auto; align-items: center; }
-    #not-in-service .nis-label {
-      flex: 1 1 auto;
-      min-width: 0;
-      text-align: start;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    #not-in-service:not(.armed):hover {
-      background: rgba(255, 255, 255, .09);
-      border-color: rgba(255, 255, 255, .14);
-      color: var(--text);
-    }
-    /* Armed: one press in, waiting for the second. Red because this is the one
-       control here whose result cannot be undone from this window. */
-    #not-in-service.armed {
-      background: #3a1d1a;
-      border-color: #c0392b;
-      color: var(--err);
-    }
-
     /* -- status ----------------------------------------------------------- */
     .status-row {
       display: flex;
@@ -354,14 +308,6 @@
       </span>
     </button>
   </div>
-
-  <!-- Below the pair rather than beside it, so the two buttons the rep aims
-       at all day keep their size whether or not this one is on. -->
-  <button id="not-in-service" data-action="not-in-service" type="button" aria-pressed="false">
-    <span class="nis-icon"></span>
-    <span class="nis-label">Not in Service</span>
-    <span class="sub"></span>
-  </button>
 
   <div class="status-row">
     <span class="status-dot"></span>

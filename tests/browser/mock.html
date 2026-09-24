@@ -39,7 +39,6 @@ window.__buildSalesloft = (opts = {}) => {
 
   const logger = document.createElement('div');
   logger.setAttribute('data-testid', 'popout-logger-container');
-  if (opts.loggerIsDialog) logger.setAttribute('role', 'dialog');
   app.appendChild(logger);
 
   if (opts.inCall) {
@@ -150,152 +149,11 @@ window.__buildSalesloft = (opts = {}) => {
     document.body.appendChild(ul);
   });
 
-  // The split button: "Log & Complete" plus a caret whose menu holds "Log Only".
+  // "Log & Complete", which is what kill-and-log ends on.
   const logBtn = document.createElement('button');
   logBtn.textContent = 'Log & Complete';
   logBtn.addEventListener('click', () => note('Log & Complete'));
   logger.appendChild(logBtn);
-
-  if (!opts.noMenuToggle) {
-    const caret = document.createElement('button');
-    caret.setAttribute('data-testid', 'menuToggle');
-    caret.setAttribute('aria-label', 'Open Log only or complete only menu');
-    caret.textContent = '▾';
-    caret.addEventListener('click', () => {
-      if (document.getElementById('log-menu')) return;
-      const ul = document.createElement('ul');
-      ul.id = 'log-menu';
-      for (const name of ['Log Only', 'Complete Only']) {
-        const li = document.createElement('li');
-        li.setAttribute('role', 'menuitem');
-        li.textContent = name;
-        li.addEventListener('click', () => {
-          note(name);
-          ul.remove();
-          // Logging re-renders the queue, and the rows need not come back in
-          // the order they left: `reorderOnLog` moves the last row to the top.
-          if (opts.reorderOnLog) queue.prepend(queue.lastElementChild);
-        });
-        ul.appendChild(li);
-      }
-      document.body.appendChild(ul);
-      note('menu opened');
-    });
-    logger.appendChild(caret);
-  }
-
-  // Whose page this is. Salesloft's heading is a breadcrumb.
-  const PERSON = opts.person || 'Eric Kersten';
-  document.title = 'mock salesloft';
-  if (!opts.listPage && !opts.noHeading) {
-    const h1 = document.createElement('h1');
-    h1.textContent = 'People / ' + PERSON;
-    app.insertBefore(h1, app.firstChild);
-    document.title = PERSON + ' | People | Salesloft';
-  }
-
-  // The cadence control lives on a row of the task queue beside the contact,
-  // and every row has one. They are identical but for the person in the row
-  // around them, so `queue` puts other people's rows *ahead* of this one, as
-  // the real queue had them when the flow took the first control on the page
-  // and Salesloft answered "Task removed for <someone else>".
-  const NAME = opts.removeLabel || 'Remove person from cadence';
-  const nameFrom = opts.nameFrom || 'svg-title';
-  let labelN = 0;
-  const makeRemove = (onClick) => {
-    const remove = document.createElement('button');
-    // How Salesloft really names it: not an aria-label on the button, but the
-    // <title> of the icon inside it. `nameFrom` switches between the ways an
-    // icon button can carry an accessible name, because reading only the
-    // attribute is what made this control unfindable in the field.
-    if (nameFrom === 'aria-label') remove.setAttribute('aria-label', NAME);
-    if (nameFrom === 'title') remove.setAttribute('title', NAME);
-    if (nameFrom === 'labelledby') {
-      const lbl = document.createElement('span');
-      lbl.id = 'remove-label-' + (++labelN);
-      lbl.textContent = NAME;
-      lbl.style.cssText = 'position:absolute;left:-9999px';
-      app.appendChild(lbl);
-      remove.setAttribute('aria-labelledby', lbl.id);
-    }
-    remove.innerHTML = nameFrom === 'svg-title'
-      ? `<svg width="10" height="10" role="graphics-symbol"><title>${NAME}</title></svg>`
-      : '<svg width="10" height="10"></svg>';
-    remove.style.cssText = 'width:16px;height:16px';
-    remove.addEventListener('click', onClick);
-    return remove;
-  };
-  const queue = document.createElement('div');
-  app.appendChild(queue);
-  // `hoverReveal` is how the real queue draws it: a row's remove control
-  // exists only while the mouse is over that row. So with the rep's pointer
-  // resting on someone else's row (`hovered`), theirs was the only control on
-  // the page, and the first-on-the-page lookup removed them. The contact's own
-  // row had none until something hovered it.
-  const addRow = (who, onClick) => {
-    const row = document.createElement('div');
-    const wrap = document.createElement('div');
-    const inner = document.createElement('div');
-    if (opts.hoverReveal) {
-      let shown = null;
-      const show = () => { if (!shown) { shown = makeRemove(onClick); inner.appendChild(shown); } };
-      const hide = () => { if (shown) { shown.remove(); shown = null; } };
-      // `noRevealFor` names rows that never draw their control, however they
-      // are hovered: the contact's row with nothing on it, beside someone
-      // else's that has one, is the page a climb to the whole queue got wrong.
-      if (!(opts.noRevealFor || []).includes(who)) row.addEventListener('mouseover', show);
-      row.addEventListener('mouseout', (e) => { if (!row.contains(e.relatedTarget)) hide(); });
-      if (opts.hovered === who) show();
-    } else {
-      inner.appendChild(makeRemove(onClick));
-    }
-    wrap.appendChild(inner);
-    row.appendChild(wrap);
-    const text = document.createElement('div');
-    text.innerHTML = `<span>Call 4</span><span>D4 S4: Account-Based Targeting</span>` +
-      `<span>${who} at Acme</span><span>Director, Quality</span>`;
-    row.appendChild(text);
-    queue.appendChild(row);
-  };
-  for (const other of (opts.queue || [])) {
-    addRow(other, () => note('REMOVED WRONG PERSON: ' + other));
-  }
-
-  if (!opts.noRemove) {
-    addRow(PERSON, () => {
-      note('remove from cadence');
-      // Salesloft throws toasts for unrelated things. This one is about someone
-      // else entirely and carries a dialog role, and it lands in the same
-      // window the confirmation would.
-      if (opts.toast) {
-        const toast = document.createElement('div');
-        toast.setAttribute('role', 'alertdialog');
-        toast.style.cssText = 'position:fixed;top:10px;left:40%;background:#224;z-index:20';
-        toast.innerHTML = '<span>Task deleted for Joshua Tan.</span>' +
-          '<button>View</button><button>\u2715</button>';
-        document.body.appendChild(toast);
-        note('toast opened');
-      }
-      if (!opts.confirm) return;
-      const dialog = document.createElement('div');
-      dialog.setAttribute('role', 'dialog');
-      dialog.style.cssText = 'position:fixed;inset:30% 30%;background:#333;z-index:10';
-      const words = document.createElement('p');
-      words.textContent = opts.confirmText || 'Remove this person from the cadence?';
-      dialog.appendChild(words);
-      for (const name of (opts.confirmButtons || ['Cancel', 'Remove'])) {
-        const b = document.createElement('button');
-        b.textContent = name;
-        b.addEventListener('click', () => { note('dialog:' + name); dialog.remove(); });
-        dialog.appendChild(b);
-      }
-      document.body.appendChild(dialog);
-      note('dialog opened');
-    });
-  }
-  for (const other of (opts.queueAfter || [])) {
-    addRow(other, () => note('REMOVED WRONG PERSON: ' + other));
-  }
 };
 
 // ---- chrome stub ----

@@ -317,7 +317,7 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   // invocation for that tab, which is what Chrome requires to start capture.
   if (isSalesloftTab(tab)) await armTab(tab.id);
 
-  if (command === 'kill-and-log' || command === 'start-call' || command === 'not-in-service') {
+  if (command === 'kill-and-log' || command === 'start-call') {
     sendToSalesloft(command);
     return;
   }

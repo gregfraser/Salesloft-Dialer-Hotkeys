@@ -36,15 +36,6 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return;
     if (changes.disposition) settings.disposition = changes.disposition.newValue;
-    if (changes.notInServiceDisposition) settings.notInServiceDisposition = changes.notInServiceDisposition.newValue;
-    // The third control is present or absent, never hidden in place, so
-    // turning it on or off rebuilds the overlay the same way the transcript
-    // pane does. The pair above it keeps its exact geometry either way; all
-    // that changes is 34px of plate below them.
-    if (changes.notInService) {
-      settings.notInService = changes.notInService.newValue;
-      syncOverlay(true);
-    }
     if (changes.pageOverlay) {
       settings.pageOverlay = changes.pageOverlay.newValue;
       syncOverlay();
@@ -71,17 +62,13 @@
     }
   });
 
-  // confirmTimeout is deliberately short and deliberately not stepTimeout: it
-  // is how long to wait for a confirmation dialog that may not exist in this
-  // Salesloft build at all, so its absence has to cost a moment, not 8s.
-  const CONFIG = { stepTimeout: 8000, autoAdvanceDelayMs: 400, confirmTimeout: 1500 };
+  const CONFIG = { stepTimeout: 8000, autoAdvanceDelayMs: 400 };
 
   // What each button is, keyed by the action it fires — the same names the
   // manifest's commands and the message protocol use.
   const ACTION_LABELS = {
     'kill-and-log': 'No Answer',
     'start-call': 'Call',
-    'not-in-service': 'Not in Service',
   };
 
   // Chrome's own shortcut for each action, as Chrome has it right now: '' for a
@@ -343,313 +330,6 @@
     });
   }
 
-  // ---------------- Not in Service (DOM) ----------------
-  // The steps below are Salesloft's own, taken from a recording of the flow
-  // done by hand rather than guessed at. Tier order is the same as everywhere
-  // else in this extension: the accessible name first, a data-testid second, a
-  // generated styled-components class never — those change on every deploy.
-
-  // Salesloft splits logging into a button and a caret beside it. "Log Only" is
-  // in the caret's menu, and it is the right one here: completing the step is
-  // what removing the person from the cadence replaces.
-  function logMenuToggle() {
-    const root = loggerRoot();
-    const nodes = [...root.querySelectorAll('button,[role="button"],[data-testid="menuToggle"]')];
-    return (
-      nodes.find((n) => visible(n) && /log only/i.test(n.getAttribute('aria-label') || '')) ||
-      nodes.find((n) => visible(n) && n.matches('[data-testid="menuToggle"]')) ||
-      null
-    );
-  }
-
-  // The opened menu is portalled to the end of the body, so this is not scoped
-  // to the logger the way the buttons are.
-  function menuItemByText(text) {
-    const t = text.toLowerCase();
-    return [...document.querySelectorAll('[role="menuitem"],[role="option"],li,button')].find(
-      (el) => el.offsetParent !== null && el.textContent.replace(/\s+/g, ' ').trim().toLowerCase() === t
-    );
-  }
-
-  // What a screen reader would call this element. An icon button gets its name
-  // from any of several places, and reading only `aria-label` is how the
-  // cadence control came to be unfindable: Salesloft names it from the
-  // `<title>` inside its SVG — which is what a recorded
-  // `::-p-aria(Remove person from cadence) >>>> ::-p-aria([role="graphics-symbol"])`
-  // was saying all along — so the attribute lookup found nothing and the step
-  // timed out after logging the call.
-  function accessibleName(el) {
-    const label = el.getAttribute('aria-label');
-    if (label && label.trim()) return label;
-
-    const owned = el.getAttribute('aria-labelledby');
-    if (owned) {
-      const text = owned.split(/\s+/)
-        .map((id) => { const node = document.getElementById(id); return node ? node.textContent : ''; })
-        .join(' ');
-      if (text.trim()) return text;
-    }
-
-    const title = el.getAttribute('title');
-    if (title && title.trim()) return title;
-
-    // An icon has no text, so its name lives in the <title> of its own artwork.
-    const drawn = el.querySelector('title');
-    if (drawn && drawn.textContent.trim()) return drawn.textContent;
-
-    return el.textContent || '';
-  }
-
-  // The cadence's own control, on the page behind the logger rather than in it.
-  const REMOVE_FROM_CADENCE = /remove\s+(?:person|this person|them)?\s*from\s+(?:the\s+)?cadence/i;
-
-  // Every named control on the page, for when the one we wanted was not there.
-  // Names only — never a transcript line, never anything the prospect said.
-  function dumpNames() {
-    try {
-      const names = [...document.querySelectorAll('button,[role="button"],a[href]')]
-        .filter((el) => isShown(el))
-        .map((el) => accessibleName(el).replace(/\s+/g, ' ').trim())
-        .filter((name) => name && name.length < 60);
-      console.warn('[dialer] no single Remove from cadence control for this contact. Named controls on the page:',
-        [...new Set(names)].sort());
-    } catch (e) { /* never let logging break a flow */ }
-  }
-
-  // Every control on the page named for taking someone out of a cadence.
-  function removalControls() {
-    const found = [];
-    for (const el of document.querySelectorAll('button,[role="button"],a[href]')) {
-      // Cheap first. Resolving a proper accessible name for every control on a
-      // Salesloft page, ten times a second for eight seconds, is not free — but
-      // the word has to appear *somewhere* on the element first, and
-      // textContent already reaches into the svg <title> where this one keeps
-      // its name. Only aria-labelledby puts the text in another element
-      // entirely, and almost nothing uses it.
-      const attrs = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`;
-      if (!el.hasAttribute('aria-labelledby') && !/cadence/i.test(attrs + ' ' + (el.textContent || ''))) continue;
-      // Not filtered on being visible: the queue draws a row's control only
-      // while that row is hovered, and a control the rep cannot see is still
-      // one this flow must account for before it clicks any of them.
-      if (el.disabled) continue;
-      const name = accessibleName(el).replace(/\s+/g, ' ').trim();
-      if (REMOVE_FROM_CADENCE.test(name)) found.push(el);
-    }
-    // Falling back to text content means an outer container holding a control
-    // can match as well as the control inside it. The innermost is the control.
-    return found.filter((el) => !found.some((other) => other !== el && el.contains(other)));
-  }
-
-  // The name as a whole word or phrase, so "Eric Kersten" is not found inside
-  // "Erica Kerstenson".
-  function namePattern(name) {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, 'iu');
-  }
-
-  // A task row is well under this; anything bigger is a region of the page,
-  // not a row. A backstop only: the landmarks below are the real boundary.
-  const ROW_TEXT_LIMIT = 800;
-
-  // What no queue row ever contains: the page's own heading, the logger, this
-  // extension's plate. Each one carries the contact's name, so a climb that
-  // reaches one has left every row behind and would find the name there
-  // instead — which is exactly how the only control on a page, belonging to
-  // someone else, would come to read as this person's.
-  function removalLandmarks() {
-    return [
-      window.slContactNameElement && window.slContactNameElement(document),
-      document.querySelector('[data-testid="popout-logger-container"]'),
-      document.getElementById('sl-hotkey-overlay'),
-    ].filter(Boolean);
-  }
-
-  // Is this control about the person named? Salesloft puts one of these on
-  // the rows of the task queue, each for a different person, identical but for
-  // the row around them. The row is the first container around the control
-  // that holds any text of its own: in the queue, the icon cell's parent,
-  // which carries "Call 2 … Corey Adamonis at Omnicell". The name has to be
-  // in *that*, and nowhere further up.
-  //
-  // Further up is where both field failures came from. The queue draws a
-  // row's control only while the mouse is over that row, so the one control on
-  // the page was whichever row the rep's pointer rested on: first the flow
-  // clicked it, and then a looser version of this rule climbed from it to the
-  // whole queue, found the contact's row in there, and would have clicked it
-  // all the same.
-  function removalIsFor(el, controls, pattern, landmarks) {
-    for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
-      if (controls.some((other) => other !== el && node.contains(other))) return false;
-      if (landmarks.some((mark) => node.contains(mark))) return false;
-      if ((node.textContent || '').length > ROW_TEXT_LIMIT) return false;
-      if (hasTextBeyond(node, el)) return pattern.test(spacedText(node));
-    }
-    return false;
-  }
-
-  // Whether `node` holds any text that is not inside `el`.
-  function hasTextBeyond(node, el) {
-    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) {
-      const t = walker.currentNode;
-      if (!el.contains(t) && t.nodeValue.trim()) return true;
-    }
-    return false;
-  }
-
-  // Put the pointer, as far as the page can tell, over every place the
-  // contact's name is written outside the landmarks, so the queue draws the
-  // remove control on their row the way it does under the rep's hand. Only
-  // hover events: nothing is clicked here, and whatever this reveals is still
-  // held to removalIsFor() before anything is.
-  function revealRowsFor(pattern, landmarks) {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    const hosts = [];
-    while (walker.nextNode() && hosts.length < 20) {
-      const t = walker.currentNode;
-      const host = t.parentElement;
-      if (!host || !pattern.test(t.nodeValue)) continue;
-      if (landmarks.some((mark) => mark.contains(host))) continue;
-      hosts.push(host);
-    }
-    for (const host of hosts) hoverOver(host);
-  }
-
-  function hoverOver(el) {
-    const opts = { bubbles: true, cancelable: true, view: window, relatedTarget: null };
-    try {
-      el.dispatchEvent(new PointerEvent('pointerover', opts));
-      el.dispatchEvent(new MouseEvent('mouseover', opts));
-      for (let n = el, i = 0; n && n !== document.body && i < 8; n = n.parentElement, i++) {
-        n.dispatchEvent(new PointerEvent('pointerenter', { ...opts, bubbles: false }));
-        n.dispatchEvent(new MouseEvent('mouseenter', { ...opts, bubbles: false }));
-      }
-    } catch (e) { /* a hover that cannot be sent only means nothing is revealed */ }
-  }
-
-  // A row's text with its pieces kept apart. textContent runs adjacent
-  // elements together with no space — "Account-Based TargetingEric Kersten at
-  // Acme" — and a name glued to the word before it is not a whole word.
-  function spacedText(node) {
-    const parts = [];
-    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) parts.push(walker.currentNode.nodeValue);
-    return parts.join(' ');
-  }
-
-  // What the removal step saw, for the next bug report: whose name it looked
-  // for, and for each remove control on the page, the row text it read.
-  function dumpRemoval(person) {
-    try {
-      const controls = removalControls();
-      const landmarks = removalLandmarks();
-      const rows = controls.map((el) => {
-        let node = el.parentElement;
-        while (node && node !== document.body && !hasTextBeyond(node, el)) node = node.parentElement;
-        return {
-          shown: isShown(el),
-          row: node ? spacedText(node).replace(/\s+/g, ' ').trim().slice(0, 160) : '',
-          landmarked: !!node && landmarks.some((mark) => node.contains(mark)),
-        };
-      });
-      console.warn('[dialer] remove from cadence: looked for', JSON.stringify(person),
-        '(title:', JSON.stringify(document.title), ') and saw', rows);
-    } catch (e) { /* never let logging break a flow */ }
-  }
-
-  // The one removal control for this person, or a reason there is not exactly
-  // one. Two is as much a stop as none: guessing between them is how the wrong
-  // person comes out of a cadence.
-  function removalFor(person, reveal) {
-    const pattern = namePattern(person);
-    const landmarks = removalLandmarks();
-    if (reveal) revealRowsFor(pattern, landmarks);
-    const controls = removalControls();
-    const mine = controls.filter((el) => removalIsFor(el, controls, pattern, landmarks));
-    if (mine.length === 1) return { el: mine[0] };
-    return { count: mine.length, total: controls.length };
-  }
-
-  // Waits for exactly one control for this person, and throws a sentence the
-  // status strip can carry when there is not.
-  async function findRemovalFor(person) {
-    let last = { count: 0, total: 0 };
-    let tick = 0;
-    const found = await waitFor(() => {
-      // Hover on the first poll and about once a second after, in case the
-      // queue re-renders the row out from under the first one.
-      last = removalFor(person, tick++ % 10 === 0);
-      return (last.el || last.count > 1) ? last : null;
-    }, CONFIG.stepTimeout).catch(() => null);
-    if (found && found.el) return found.el;
-    // By this point nobody has been removed, but the rep has to finish by hand
-    // and nobody can see why. The names that *were* on the page go to the
-    // console, where the next report can pick them up.
-    dumpNames();
-    dumpRemoval(person);
-    if (last.count > 1) {
-      throw new Error(`found ${last.count} Remove from cadence controls for ${person}, so none was clicked`);
-    }
-    throw new Error(last.total
-      ? `none of the ${last.total} Remove from cadence controls is beside ${person}'s name, so none was clicked`
-      : `could not find the Remove from cadence control for ${person}`);
-  }
-
-  // Salesloft asks before it removes someone. The dialog is not in the
-  // recording of this flow, so its absence is a normal outcome and not a
-  // failure — but a dialog that does appear and has no button this recognises
-  // is, because leaving one open would mean the rep thinks the person is out of
-  // the cadence when they are still in it.
-  const CONFIRM_TEXTS = [
-    'remove from cadence', 'remove person from cadence', 'remove', 'confirm',
-    'yes, remove', 'yes', 'ok', 'delete', 'continue',
-  ];
-
-  const DIALOGS = '[role="dialog"],[role="alertdialog"]';
-
-  // A dialog is only this removal's confirmation if it says so. Being new is
-  // not enough: Salesloft throws toasts for unrelated things — "Task deleted
-  // for <someone else>", with a View and a dismiss — and a toast carrying a
-  // dialog role arrives in the same window and matches on novelty alone. So a
-  // candidate has to mention what it is about, and anything else on screen is
-  // left where it is rather than being answered.
-  const REMOVAL_WORDS = /cadence|remove/i;
-
-  // `existing` is whatever was already open when the removal was clicked.
-  // Salesloft's own logger popout carries role="dialog", so without that
-  // snapshot this matched the popout the flow had just been driving, found no
-  // button it recognised, and reported a removal that had in fact succeeded as
-  // "Stopped: … Finish manually."
-  async function confirmCadenceRemoval(existing) {
-    let dialog;
-    try {
-      dialog = await waitFor(
-        () => [...document.querySelectorAll(DIALOGS)].find(
-          (d) => !existing.has(d) && isShown(d) && REMOVAL_WORDS.test(d.textContent || '')
-        ),
-        CONFIG.confirmTimeout
-      );
-    } catch (e) {
-      return; // no confirmation step — the click above was the whole of it
-    }
-    const buttons = [...dialog.querySelectorAll('button')].filter(visible);
-    const button = buttons.find(
-      (b) => CONFIRM_TEXTS.indexOf(b.textContent.replace(/\s+/g, ' ').trim().toLowerCase()) !== -1
-    );
-    if (!button) {
-      // Name them. This dialog's wording is the one part of the flow that was
-      // never recorded, so a stop here has to hand back what it actually saw
-      // rather than leaving the next person to guess at it.
-      const labels = buttons.map((b) => b.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
-      throw new Error(
-        labels.length
-          ? `the removal dialog offers ${labels.map((l) => `"${l}"`).join(', ')} — confirm it there`
-          : 'a removal dialog is open — confirm it there'
-      );
-    }
-    realClick(button);
-  }
-
   // ---------------- Core flows ----------------
   let busy = false;
 
@@ -688,127 +368,6 @@
     }
   }
 
-  // A dead number. Log the call under its own disposition and take the person
-  // out of the cadence, so tomorrow's list does not hand it back.
-  //
-  // Same invariant as killAndLog: the disposition is set before anything logs,
-  // and any failed step throws and leaves the call unlogged rather than logging
-  // it wrong. The removal is last for the same reason — a person who is out of
-  // the cadence with no call logged against them is the worse half-state.
-  async function runNotInService() {
-    // Gated here as well as at the control, because the panel and the worker
-    // can both reach this directly and a stale window must not drive a feature
-    // that has since been turned off.
-    if (busy || !settings.notInService) return;
-    setBusy(true);
-    const disposition = settings.notInServiceDisposition || 'Not in Service';
-    try {
-      // Whose removal this is, settled before anything is touched. The queue
-      // beside a contact carries an identical remove control for every person
-      // in it, so without a name to hold each one against, "the" control is
-      // whichever comes first on the page, and that is someone else as often
-      // as not. Checked now, while nothing is ended or logged, so a page this
-      // cannot read stops the flow clean rather than halfway.
-      //
-      // Only on the contact's own page. Dialled from a list or a cadence, the
-      // heading is that page's name, not a person's, and a queue row that
-      // happens to mention it would read as theirs.
-      if (!onPersonPage()) {
-        throw new Error('Not in Service removes from a cadence only on the contact\'s own page, so nothing was logged or removed');
-      }
-      const person = window.slContactName ? window.slContactName(document) : '';
-      if (!person) throw new Error('could not tell whose page this is, so nothing was logged or removed');
-      setStatus(`Finding ${person} in the cadence…`);
-      await findRemovalFor(person).catch((err) => {
-        throw new Error(`${err.message}. Nothing was logged`);
-      });
-
-      const endBtn = buttonByText('End Call');
-      if (endBtn) {
-        setStatus('Ending call…');
-        realClick(endBtn);
-        await sleep(CONFIG.autoAdvanceDelayMs);
-      }
-
-      setStatus(`Setting "${disposition}"…`);
-      await setDisposition(disposition);
-      await sleep(CONFIG.autoAdvanceDelayMs);
-
-      setStatus('Logging…');
-      const menu = await waitFor(
-        logMenuToggle, CONFIG.stepTimeout, 100, 'the Log & Complete menu');
-      trace('log menu', menu);
-      realClick(menu);
-      const logOnly = await waitFor(
-        () => menuItemByText('Log Only'), CONFIG.stepTimeout, 100, '"Log Only" in that menu');
-      trace('Log Only', logOnly);
-      realClick(logOnly);
-      await sleep(CONFIG.autoAdvanceDelayMs);
-
-      // Found again rather than reused: logging re-renders the queue, and the
-      // rows can move under a reference taken before it. Held to the same rule
-      // — exactly one control, beside this person's name.
-      setStatus(`Removing ${person} from cadence…`);
-      const remove = await findRemovalFor(person);
-      trace('remove from cadence', remove);
-      hoverOver(remove);
-      // Snapshot first: only a dialog that was not already open can be this
-      // removal's own.
-      const openDialogs = new Set(document.querySelectorAll(DIALOGS));
-      realClick(remove);
-      await confirmCadenceRemoval(openDialogs);
-
-      setStatus(`Logged ${disposition} ✓, ${person} removed from cadence`, 'ok');
-    } catch (err) {
-      setStatus(`Stopped: ${err.message}. Finish manually.`, 'err');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // One press arms, a second within three seconds commits. This is the only
-  // control on the plate that takes a person out of a cadence, and undoing that
-  // means finding them and adding them back by hand — but a modal mid-call is
-  // exactly what this extension does not do, so the confirmation lives in the
-  // control itself: it says what it is about to do and waits.
-  const ARM_MS = 3000;
-  let armed = false;
-  let armHandle = null;
-
-  function disarm() {
-    clearTimeout(armHandle);
-    armHandle = null;
-    if (!armed) return;
-    armed = false;
-    renderSecondary();
-  }
-
-  function notInService() {
-    if (busy || !settings.notInService) return;
-    // The arming *is* the confirmation, so it has to be somewhere the rep can
-    // see it. Two surfaces have no strip to turn red — the page controls off
-    // entirely, and the compact bar, which deliberately does not carry this
-    // control — and arming silently on either would mean a second keypress
-    // removing someone from a cadence with nothing having asked. The panel
-    // confirms on its own surface and commits directly, so it never lands here.
-    if (!nis) {
-      setStatus('Not in Service needs the full plate or the floating panel', 'err');
-      return;
-    }
-    if (!armed) {
-      armed = true;
-      clearTimeout(armHandle);
-      armHandle = setTimeout(disarm, ARM_MS);
-      renderSecondary();
-      // Short enough to survive the 214px strip when there is no pane beside
-      // it; the button itself is already saying what "again" would do.
-      setStatus('Press again to confirm', 'warn');
-      return;
-    }
-    disarm();
-    runNotInService();
-  }
-
   async function startCall() {
     if (busy) return;
     setBusy(true);
@@ -832,15 +391,6 @@
     if (msg.type === 'dialer-action') {
       if (msg.action === 'kill-and-log') killAndLog();
       if (msg.action === 'start-call') startCall();
-      // `confirmed` means the rep already answered the question on the surface
-      // they were looking at — the floating panel arms and confirms itself.
-      // Without this the panel's confirming press only armed the content
-      // script, so the removal took four presses rather than two and the last
-      // two had to land inside a 3s window.
-      if (msg.action === 'not-in-service') {
-        if (msg.confirmed) runNotInService();
-        else notInService();
-      }
     }
 
     // Transcription traffic, relayed by the background worker: content scripts
@@ -945,17 +495,8 @@
   // already carries the timer and the line count. A rail that repeated them
   // was 96px wide for information that was on screen twice.
   const PANE_MINI_WIDTH = 34;
-  // The third control. Two thirds the height of a keycap row and a quarter of
-  // the pair's, because it is the thing a rep reaches for once in a hundred
-  // dials, not once in three.
-  const SECONDARY_HEIGHT = 26;
-  // The strip is the whole button column when the transcript pane is open
-  // beside it, and its mark and key alone when the plate is narrow: at 278
-  // there is no room for a name, and the tooltip still carries it.
-  // 80, not 64: the mark is 13, the gap 6, and a real cap reads "Ctrl⇧7" at
-  // about 44. A box sized for a one-character cap clips the one Chrome
-  // actually assigns.
-  const NIS_TIGHT_WIDTH = 80;
+  // The base row under the pair: the status, the call timer and the count.
+  const BASE_ROW_HEIGHT = 26;
   const HEADER_GAP = 6;         // inside the pane header
   // The status is one line, always, and reserved whether or not it has
   // anything to say — that is what stops a long "Stopped: …" from resizing the
@@ -1014,7 +555,6 @@
   let plateResizeBound = false;
   let overlayEl = null; // the box this copy of the script built, if any
   let ctl = null;       // the two action buttons, or null with no overlay
-  let nis = null;       // the Not in Service strip, or null when it is off
   let tx = null;        // transcript DOM refs, or null when the pane is not built
 
   // Transcript state outlives the DOM: rebuilding the overlay (a settings
@@ -1052,18 +592,6 @@
   // while a call is actually up: browsing a cadence gets nothing, calling in
   // one gets the buttons wherever it was started from.
   const LOGGER_DOM = '[data-testid="popout-logger-container"]';
-
-  // Strictly a contact's own page: the route or the person-detail marker, and
-  // never the logger popout, which is on screen wherever a call was dialled
-  // from. The plate may show on a list mid-call; a cadence removal may not.
-  function onPersonPage() {
-    try {
-      return !!((window.slIsContactUrl && window.slIsContactUrl(location.href)) ||
-        document.querySelector(CONTACT_DOM));
-    } catch (e) {
-      return false;
-    }
-  }
 
   function onContactPage() {
     if (window.slIsContactUrl && window.slIsContactUrl(location.href)) return true;
@@ -1114,12 +642,7 @@
     plateX = null;
     plateY = null;
     ctl = null;
-    nis = null;
     tx = null;
-    // The arming window belongs to the control that is armed. An overlay
-    // replaced mid-window would otherwise leave a press half-made against a
-    // button that is no longer on the page.
-    disarm();
   }
 
   // Subtle mirror of the contact alert inside the overlay — one tinted line,
@@ -1206,15 +729,6 @@
         `background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.16);` +
         `box-shadow:inset 0 1px 0 rgba(255,255,255,.08);border-radius:4px;padding:2px 4px 2px 5px;` +
         `font-size:${TYPE.overline}px;font-weight:600;line-height:1;letter-spacing:.04em;white-space:nowrap}`,
-      // The third control. A raised face like the pane header rather than a
-      // third gradient: it is a smaller thing than the pair above it and has to
-      // read that way at a glance, or the plate grows a third primary action.
-      `#${OVERLAY_ID} .sl-second{display:flex;align-items:center;gap:6px;` +
-        `box-sizing:border-box;width:100%;height:${SECONDARY_HEIGHT}px;padding:0 8px;` +
-        `border-radius:5px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);` +
-        `box-shadow:inset 0 1px 0 rgba(255,255,255,.06);color:${FG_SOFT};` +
-        `font-size:${TYPE.alert}px;font-weight:500;cursor:pointer;` +
-        `transition:background-color ${RELEASE_MS}ms ease,border-color ${RELEASE_MS}ms ease,color ${RELEASE_MS}ms ease}`,
       // The small square buttons in the pane header. Their resting look lives
       // here so a highlight set inline — the save nudge, the paused state — can
       // be cleared back to it with an empty string.
@@ -1232,8 +746,6 @@
       // it stuck on the last thing touched, so it is gated rather than global.
       '@media (hover:hover) and (pointer:fine){' +
         `#${OVERLAY_ID} .sl-act:hover{filter:brightness(1.10)}` +
-        `#${OVERLAY_ID} .sl-second:not(.sl-armed):hover{background:rgba(255,255,255,.09);` +
-          `border-color:rgba(255,255,255,.14);color:${FG}}` +
         `#${OVERLAY_ID} .sl-icon:hover{background:rgba(255,255,255,.12);color:#fff}` +
         `#${OVERLAY_ID} .sl-icon.sl-save:hover{background:rgba(184,134,11,.3);color:#ffd88a}` +
         `#${OVERLAY_ID} .sl-pill:hover{filter:brightness(1.25)}}`,
@@ -1242,7 +754,7 @@
       // rather than sitting there looking live. The press spring is suppressed
       // in the same state (see pressable's guard in buildOverlay), so a press
       // that is being thrown away does not answer as though it was not.
-      `#${OVERLAY_ID}.sl-busy .sl-act,#${OVERLAY_ID}.sl-busy .sl-second` +
+      `#${OVERLAY_ID}.sl-busy .sl-act` +
         '{filter:saturate(.4) brightness(.72);cursor:progress}',
 
       // Reduced motion: the springs already snap (spring.js checks the query on
@@ -1309,7 +821,6 @@
       paintKeys(ctl.kill, 'kill-and-log');
       paintKeys(ctl.call, 'start-call');
     }
-    if (nis) paintKeys(nis.el, 'not-in-service');
   }
 
   // ✕ / ▶ over the label over the keys that do the same thing. The keycaps are
@@ -1387,73 +898,6 @@
     paintKeys(b, action);
     window.slPressable(b, () => !busy);
     return b;
-  }
-
-  // The third control. Everything about it is smaller than the pair above: a
-  // raised face rather than a gradient, one line rather than two, 26px rather
-  // than 108. That is the whole point of it — a rep reaches for this once in a
-  // hundred dials, and a control that looks like the other two would be read as
-  // often as them.
-  function buildSecondary() {
-    const b = document.createElement('button');
-    b.className = 'sl-second';
-    b.type = 'button';
-    // Mark, label, key — the same left-to-right order the pair reads in, at a
-    // quarter of the height. The shape lives in overlayStyle(); only the colour
-    // changes below, and only when the control is armed.
-    b.innerHTML =
-      `<span style="display:flex;flex:0 0 auto;align-items:center">${window.SL_ICONS.block}</span>` +
-      '<span class="sl-second-label" style="flex:1 1 auto;min-width:0;text-align:start;' +
-        'overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>' +
-      '<span class="sl-keys" style="display:flex;gap:4px;flex:0 0 auto"></span>';
-    b.addEventListener('click', notInService);
-    // Same gate as the pair: a press whose click is about to be swallowed by
-    // the busy flag must not answer as though it was not.
-    window.slPressable(b, () => !busy);
-
-    const wrap = document.createElement('div');
-    wrap.style.cssText = ['flex:0 0 auto', 'box-sizing:border-box', 'display:flex'].join(';');
-    wrap.appendChild(b);
-
-    nis = { el: b, wrap, label: b.querySelector('.sl-second-label') };
-    renderSecondaryWidth();
-    renderSecondary();
-    paintKeys(b, 'not-in-service');
-    return wrap;
-  }
-
-  // Two widths, and which one is in use follows the pane beside it: with the
-  // transcript open the plate is 552 and the strip is the whole button column;
-  // collapsed or with transcription off it is 278 or 234, and the name does not
-  // fit next to a status line that has to hold "Stopped: …". The mark and the
-  // key stay, so the control is still a control; the tooltip keeps the name.
-  function renderSecondaryWidth() {
-    if (!nis) return;
-    const wide = !!settings.transcription && !txView.minimized;
-    nis.wrap.style.width = `${wide ? CONTROLS_WIDTH : NIS_TIGHT_WIDTH}px`;
-    nis.el.style.justifyContent = wide ? '' : 'center';
-    nis.label.style.display = wide ? '' : 'none';
-  }
-
-  // Rest, and armed. Armed is the red the rest of the extension uses for a
-  // thing that has already gone wrong, because this is the one control here
-  // whose result cannot be undone from this plate — and it says what it is
-  // about to do rather than repeating its own name.
-  function renderSecondary() {
-    if (!nis) return;
-    const theme = window.SL_PALETTE.red;
-    nis.label.textContent = armed ? 'Remove from cadence?' : ACTION_LABELS['not-in-service'];
-    nis.el.classList.toggle('sl-armed', armed);
-    nis.el.style.background = armed ? theme.bg : '';
-    nis.el.style.borderColor = armed ? theme.border : '';
-    nis.el.style.color = armed ? theme.text : '';
-    nis.el.setAttribute('aria-pressed', String(armed));
-    // The keycap goes while it is asking. The question is longer than the
-    // label it replaces, and the key is not news at the moment the control is
-    // waiting to hear whether it should go ahead — a truncated
-    // "Remove from cad…" is the one thing here a rep must not have to guess at.
-    const keys = nis.el.querySelector('.sl-keys');
-    if (keys) keys.style.display = armed ? 'none' : 'flex';
   }
 
   // Where the rep last put the plate, as an offset from the bottom-left anchor.
@@ -1746,30 +1190,22 @@
     if (hasTranscript) main.appendChild(buildTranscript());
     box.appendChild(main);
 
-    // One row under the pair, carrying both the third control and the status.
-    // They used to be two stacked rows, and the strip was 214 wide inside a
-    // plate that is 278 or 552 — so the corner under the transcript pane was
-    // bare, which is what read as unfinished. Sharing the line fills that
-    // corner and gives back 26px of plate at the same time.
+    // One row under the pair, carrying the status across the whole plate.
     const baseRow = document.createElement('div');
     baseRow.style.cssText = [
       'display:flex', 'align-items:center', `gap:${STACK_GAP}px`,
-      `height:${SECONDARY_HEIGHT}px`, 'flex:0 0 auto', 'box-sizing:border-box',
+      `height:${BASE_ROW_HEIGHT}px`, 'flex:0 0 auto', 'box-sizing:border-box',
       // Takes the box's width without setting it: "Stopped: Timed out waiting
       // for element." must not be what decides how wide the plate is.
       'width:0', 'min-width:100%',
     ].join(';');
-    if (settings.notInService) baseRow.appendChild(buildSecondary());
-
     baseRow.appendChild(buildStatusRow());
     box.appendChild(baseRow);
     finishOverlay(box);
   }
 
   // The compact bar: the status the full plate shows, and the same two actions
-  // at 26px. No strip — a control that removes someone from a cadence does not
-  // belong on the surface a rep chose because they wanted the plate out of the
-  // way — and no pane, which is what the panel and the full plate are for.
+  // at 26px. No pane, which is what the panel and the full plate are for.
   function buildCompactRow(box) {
     box.style.padding = '8px';
     // The same width as the button column it stands in for, so switching modes
@@ -1944,7 +1380,6 @@
 
     renderLineCount();
     renderArmPrompt();
-    renderSecondaryWidth();
     if (hidden) return;
     // A hidden list has no measurable height, so anything that arrived while it
     // was away leaves the view stale. Come back at the newest line.
@@ -2397,7 +1832,6 @@
       const hotkeys = settings.hotkeys || {};
       if (pressed === hotkeys['kill-and-log']) { e.preventDefault(); killAndLog(); }
       else if (pressed === hotkeys['start-call']) { e.preventDefault(); startCall(); }
-      else if (pressed === hotkeys['not-in-service']) { e.preventDefault(); notInService(); }
     },
     true
   );

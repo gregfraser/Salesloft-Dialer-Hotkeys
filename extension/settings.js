@@ -13,10 +13,6 @@ const els = {
   compactBar: document.getElementById('compactBar'),
   compactGroup: document.getElementById('compact-group'),
   disposition: document.getElementById('disposition'),
-  notInService: document.getElementById('notInService'),
-  notInServiceDisposition: document.getElementById('notInServiceDisposition'),
-  notInServiceGroup: document.getElementById('not-in-service-group'),
-  notInServiceKeys: document.getElementById('not-in-service-keys'),
   keybindNote: document.getElementById('keybind-note'),
   chromeShortcuts: document.getElementById('chrome-shortcuts'),
   alertsEnabled: document.getElementById('alertsEnabled'),
@@ -39,9 +35,6 @@ chrome.storage.sync.get(DEFAULTS, (settings) => {
   els.compactBar.checked = settings.compactBar;
   syncCompactGroup();
   els.disposition.value = settings.disposition;
-  els.notInService.checked = settings.notInService;
-  els.notInServiceDisposition.value = settings.notInServiceDisposition;
-  syncNotInServiceGroup();
   applyHotkeys(settings.hotkeys);
   els.alertsEnabled.checked = settings.alertsEnabled;
   els.alertStrict.checked = settings.alertStrict;
@@ -79,15 +72,6 @@ function paintSwatches() {
   }
 }
 
-// The disposition and the key only mean anything with the button on, so they
-// dim and stop taking clicks with it — the switch itself stays live, because
-// that is how the rep turns it back on.
-function syncNotInServiceGroup() {
-  const off = !els.notInService.checked;
-  els.notInServiceGroup.classList.toggle('disabled-group', off);
-  els.notInServiceKeys.classList.toggle('disabled-group', off);
-}
-
 // The compact bar is a way of drawing the on-page controls, so it means
 // nothing with those off and dims with them.
 function syncCompactGroup() {
@@ -118,7 +102,6 @@ let recording = null; // the action waiting for a key, or null
 const ACTION_NAMES = {
   'kill-and-log': 'End call & log',
   'start-call': 'Start the next call',
-  'not-in-service': 'Not in service & remove',
 };
 
 const keyButtons = [...document.querySelectorAll('button.key')];
@@ -258,17 +241,6 @@ els.pageOverlay.addEventListener('change', () => {
 
 els.compactBar.addEventListener('change', () => {
   persist('compactBar', els.compactBar.checked);
-});
-
-els.notInService.addEventListener('change', () => {
-  syncNotInServiceGroup();
-  persist('notInService', els.notInService.checked);
-});
-
-els.notInServiceDisposition.addEventListener('change', () => {
-  const value = els.notInServiceDisposition.value.trim() || DEFAULTS.notInServiceDisposition;
-  els.notInServiceDisposition.value = value;
-  persist('notInServiceDisposition', value);
 });
 
 els.disposition.addEventListener('change', () => {
