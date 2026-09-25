@@ -12,7 +12,7 @@ It also checks each contact before you dial. If Salesloft already has them tagge
 
 ## Install
 
-1. **Download it.** Click the green **Code** button at the top of this page, then **Download ZIP**.
+1. **Download it.** Go to the [latest release](https://github.com/gregfraser/Salesloft-Dialer-Hotkeys/releases/latest) and click **Source code (zip)** under **Assets**.
 2. **Unzip it.** On Windows, right-click the file and choose **Extract All**. On a Mac, double-click it.
 3. **Put the folder somewhere permanent**, like Documents. Chrome runs the extension from this folder, so if it gets moved or deleted the extension stops working.
 4. **Open Chrome's extensions page.** Type `chrome://extensions` in the address bar and press <kbd>Enter</kbd>.
@@ -27,8 +27,8 @@ The buttons only appear where there's someone to dial: a person's page, or where
 
 ### Updating to a new version
 
-1. Download the ZIP again and unzip it.
-2. Replace the contents of your old folder with the new one (keep the folder in the same place).
+1. Download **Source code (zip)** from the [latest release](https://github.com/gregfraser/Salesloft-Dialer-Hotkeys/releases/latest) and unzip it.
+2. Copy everything inside the new folder into your old folder, replacing what's there. Keep the old folder where it is: Chrome remembers the extension, and your settings, by that folder's location.
 3. On `chrome://extensions`, click the reload arrow ↻ on the **Salesloft Dialer Hotkeys** card.
 4. Refresh your Salesloft tab.
 
