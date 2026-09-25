@@ -49,6 +49,13 @@ node behaviour.mjs   # the transcript pane, the not-armed state (11)
 node regress.mjs     # the two flows, where the plate shows, the compact bar (20)
 ```
 
+When Playwright's own browser download is missing or does not match the
+installed `playwright` version (it fails with "Executable doesn't exist"), point
+both scripts at an existing Chromium with `CHROMIUM_PATH` rather than
+downloading another, e.g.
+`CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome node regress.mjs`
+in the cloud container.
+
 `mock.html` is a Salesloft-shaped page built from structure and accessible
 names only, never a generated class — the same rule `content.js` follows. Make
 it as awkward as the real page — every option on `__buildSalesloft()` exists
