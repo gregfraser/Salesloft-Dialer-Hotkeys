@@ -865,12 +865,15 @@
   // Compact is a way of drawing the page controls, not a fourth surface: the
   // same two actions, the same status, the same keys, in a 42px bar instead of
   // a 160px plate. It is off by default — the full plate is what a rep gets
-  // unless they ask otherwise — and it stands down the moment a call is up,
-  // because mid-call is exactly when the large targets earn their size.
+  // unless they ask otherwise — and once chosen it stays that size through a
+  // call as well: a plate that grows on its own the moment a call connects is
+  // exactly what a rep asking for the bar was asking not to have. The
+  // transcript is still captured behind it; turning the bar off shows it with
+  // its ↓.
   const COMPACT_ACTION = 26;
 
   function compactMode() {
-    return !!settings.compactBar && lastCallState !== 'IN_CALL' && !busy;
+    return !!settings.compactBar;
   }
 
   // Drawn, like every other centred mark on this plate. The first cut of this
@@ -1622,10 +1625,11 @@
   }
 
   function addTranscriptEntry(payload) {
-    // No pane means no transcript to keep: the lines still reach the floating
-    // panel, and holding a day of them here for nobody to read would be a leak.
+    // With transcription off there is no transcript to keep. The compact bar is
+    // different: it has no pane, but the lines are kept anyway, because turning
+    // the bar off is how a rep gets to the ↓ for the call they just made.
     // A rebuild swaps the DOM synchronously, so this cannot drop a live line.
-    if (!tx) return;
+    if (!settings.transcription) return;
     const entry = {
       start: payload.start || 0,
       text: payload.text || '',
@@ -1640,6 +1644,7 @@
     }
     txView.entries.push(entry);
     txView.unsaved = true;
+    if (!tx) return;
 
     if (tx.empty) { tx.empty.remove(); tx.empty = null; }
     appendEntryNode(entry);
@@ -1860,13 +1865,8 @@
     // DOM change degrades to "no transcription", never to a thrown error.
     const result = detector.detectState(detector.liveOptions(document));
     if (result.state === lastCallState) return;
-    const wasCompact = compactMode();
     lastCallState = result.state;
     safeSend({ type: 'call-state', state: result.state, tier: result.tier });
-    // The compact bar opens to the full plate for the duration of a call and
-    // closes again after. Only that crossing rebuilds — every other state
-    // change leaves the surface alone.
-    if (settings.compactBar && wasCompact !== compactMode()) syncOverlay(true);
     setCallLive(result.state === 'IN_CALL');
 
     // The transcript pane follows the call it is transcribing. This is still
