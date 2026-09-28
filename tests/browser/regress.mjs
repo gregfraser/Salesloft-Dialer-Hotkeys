@@ -156,11 +156,30 @@ const plate = (p) => p.evaluate(() => {
     document.getElementById('app').appendChild(el);
   });
   await p.waitForTimeout(900);
-  eq('a live call opens it to the full plate', await plate(p), { w: 236, h: 160 });
+  eq('a live call leaves it the size it is', await plate(p), { w: 214, h: 44 });
   await p.evaluate(() => [...document.querySelectorAll('button')]
     .find((b) => b.textContent === 'End Call').remove());
   await p.waitForTimeout(900);
-  eq('and it closes again when the call ends', await plate(p), { w: 214, h: 44 });
+  eq('and so does the call ending', await plate(p), { w: 214, h: 44 });
+  await p.close();
+}
+{
+  // The bar has no pane, so the way to a transcript is turning the bar off.
+  // That only works if the lines were kept while there was nowhere to draw them.
+  const p = await open({ pageOverlay: true, compactBar: true, transcription: true }, {});
+  await p.evaluate(() => window.__slOnMessage({ type: 'transcript', payload: { start: 1, text: 'kept behind the bar' } }, null, () => {}));
+  await p.waitForTimeout(150);
+  eq('with transcription on, the bar is still the bar', await plate(p), { w: 214, h: 44 });
+  await p.evaluate(() => window.__slOnStorage({ compactBar: { newValue: false } }, 'sync'));
+  await p.waitForTimeout(300);
+  const shown = await p.evaluate(() => {
+    const box = document.getElementById('sl-hotkey-overlay');
+    return {
+      line: box.textContent.includes('kept behind the bar'),
+      save: !!box.querySelector('[title="Save transcript as text"]'),
+    };
+  });
+  eq('turning it off shows the line captured behind it, with its save', shown, { line: true, save: true });
   await p.close();
 }
 {

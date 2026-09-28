@@ -46,7 +46,7 @@ and git ignores whatever npm writes in that directory):
 ```bash
 cd tests/browser && npm install playwright && npx playwright install chromium
 node behaviour.mjs   # the transcript pane, the not-armed state (11)
-node regress.mjs     # the two flows, where the plate shows, the compact bar (20)
+node regress.mjs     # the two flows, where the plate shows, the compact bar (22)
 ```
 
 When Playwright's own browser download is missing or does not match the
@@ -241,7 +241,7 @@ When Salesloft ships UI changes, these are what break.
 
 - `killAndLog` sets the disposition **before** clicking "Log & Complete". Any failed step throws, surfaces "Stopped: … Finish manually.", and leaves the call unlogged — never log with a wrong or missing disposition.
 - **The extension never takes anyone out of a cadence.** It used to have a third action, Not in Service, that logged the call and then clicked the cadence's "Remove person from cadence" control, and it was taken out entirely. That control is identical on every row of the task queue beside a contact, and the queue draws it only on the row the mouse is over, so the one on the page was whichever row the rep's pointer rested on: it removed the wrong person in the field, and each fix that followed tied the control to the contact by reading the page more cleverly, which is what failed. Do not add a removal back without a way to identify the row that does not depend on reading the DOM around it.
-- **`compactBar` is how the page controls are drawn, not whether.** `pageOverlay` decides if anything is on the page; `compactBar` decides whether that is the full plate or a 42px bar carrying the same status and the same two actions at 26px. The full plate is the default and stays it. The bar has no transcript pane. It **stands down for the duration of a call**: `reportCallState()` rebuilds on the crossing into and out of `IN_CALL`, because mid-call is exactly when the large targets earn their size. That rebuild is the one place this plate changes size on its own, and it is the trade a rep accepts by choosing the mode rather than one forced on everyone.
+- **`compactBar` is how the page controls are drawn, not whether.** `pageOverlay` decides if anything is on the page; `compactBar` decides whether that is the full plate or a 42px bar carrying the same status and the same two actions at 26px. The full plate is the default and stays it. The bar has no transcript pane, and it **stays the bar through a call**: nothing rebuilds on the crossing into or out of `IN_CALL`, so it never turns into the full plate on its own. It used to stand down to the full plate mid-call, and that growth is what a rep choosing the bar was choosing not to have. The transcript is still kept behind it (`addTranscriptEntry()` gates on `settings.transcription`, not on the pane existing), because turning the bar off is how a rep gets to the ↓ for the call they just made.
 - A `busy` flag serializes flows; hotkeys and clicks are ignored while one runs.
 - In-page key bindings are suppressed while typing (`isTyping()`) — which is what makes a bare letter a usable binding at all — and ignore auto-repeat, so a held key cannot queue flows behind `busy`.
 - **The keys on the buttons are read back, never assumed.** The overlay and the panel print the rep's binding and whatever `chrome.commands.getAll()` reports, and print nothing for an action that has neither. Hard-coding `Ctrl⇧9` there is how the buttons came to claim a shortcut Chrome had left unassigned.

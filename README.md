@@ -84,7 +84,7 @@ Click the extension icon to open them.
 |---|---|
 | **Floating panel** | Puts the buttons in their own small window you can drag anywhere, even to a second monitor. It stays open while you work in other tabs. |
 | **Buttons on Salesloft page** | Shows or hides the buttons on the page. Turn it off if you only use the floating panel or the keys. |
-| **Compact bar** | Shrinks the buttons to a small bar while you're between calls. It opens back to full size during a call. |
+| **Compact bar** | Shrinks the buttons to a small bar, and keeps it that size during calls too. The bar has no transcript, but the transcript is still recorded: turn Compact bar off to read it and save it with the ↓ button. |
 | **Disposition** | What the red button logs. Starts as "No Answer". Only change it if your team's dropdown says something different, and match it exactly, capitals included. |
 | **Key bindings** | Your key for each action. See [Change your keys](#change-your-keys). |
 | **Alert on tags** | Turns contact alerts on or off. |
